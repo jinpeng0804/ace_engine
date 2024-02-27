@@ -1,0 +1,3374 @@
+diff --git a/wifi_manager/BUILD.gn b/wifi_manager/BUILD.gn
+new file mode 100644
+index 0000000000000000000000000000000000000000..325437f7f1d6a06f94f081cbf5b22377043c2173
+--- /dev/null
++++ b/wifi_manager/BUILD.gn
+@@ -0,0 +1,67 @@
++# Copyright (c) 2024 Huawei Device Co., Ltd.
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#     http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++import("//build/ohos.gni")
++import("//foundation/arkui/ace_engine/ace_config.gni")
++
++template("plugin_wifi_manager_static") {
++  forward_variables_from(invoker, "*")
++
++  ohos_source_set(target_name) {
++    defines += invoker.defines
++    cflags_cc += invoker.cflags_cc
++    include_dirs = []
++
++    sources = [
++      "wifi_callback.cpp",
++      "wifi_napi_device.cpp",
++      "wifi_napi_entry.cpp",
++      "wifi_napi_errcode.cpp",
++      "wifi_napi_utils.cpp",
++    ]
++
++    deps = [ "//plugins/interfaces/native:ace_plugin_util_${platform}" ]
++
++    if (platform == "android") {
++      deps += [ "android/java:wifi_manager_anroid_jni" ]
++    } else if (platform == "ios") {
++      deps += [ "ios:wifi_manager_ios" ]
++    }
++
++    subsystem_name = "plugins"
++    part_name = "wifi_manager"
++  }
++}
++
++foreach(item, ace_platforms) {
++  plugin_wifi_manager_static("wifi_manager_static_" + item.name) {
++    platform = item.name
++
++    defines = []
++    cflags_cc = []
++    config = {
++    }
++
++    if (defined(item.config)) {
++      config = item.config
++    }
++
++    if (defined(config.defines)) {
++      defines = config.defines
++    }
++
++    if (defined(config.cflags_cc)) {
++      cflags_cc = config.cflags_cc
++    }
++  }
++}
+diff --git a/wifi_manager/android/java/BUILD.gn b/wifi_manager/android/java/BUILD.gn
+new file mode 100644
+index 0000000000000000000000000000000000000000..1a684fdec3342a5fba959e840e3bbe6d7872e642
+--- /dev/null
++++ b/wifi_manager/android/java/BUILD.gn
+@@ -0,0 +1,51 @@
++# Copyright (c) 2024 Huawei Device Co., Ltd.
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#     http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++import("//build/ohos.gni")
++
++java_library("wifi_manager_android_java") {
++  java_files = [ "src/ohos/ace/plugin/wifimanager/WifiDevicePlugin.java",
++  "src/ohos/ace/plugin/wifimanager/WifiDeviceUtils.java",
++  "src/ohos/ace/plugin/wifimanager/WifiBroadcastReceiver.java",
++  "src/ohos/ace/plugin/wifimanager/WifiBroadcastInterface.java" ]
++  subsystem_name = "plugins"
++  part_name = "wifi_manager"
++}
++
++ohos_combine_jars("wifi_manager_java") {
++  deps = [ ":wifi_manager_android_java" ]
++
++  subsystem_name = "plugins"
++  part_name = "wifi_manager_manager"
++  jar_path = "${root_out_dir}/plugins/wifi_manager/ace_wifi_manager_android.jar"
++}
++
++ohos_source_set("wifi_manager_anroid_jni") {
++  include_dirs = [ "//third_party/json/include" ]
++  
++  sources = [
++    "jni/wifi_device_impl.cpp",
++    "jni/wifi_device_jni.cpp",
++    "jni/wifi_receive_callback.cpp",
++  ]
++
++  defines = [ "ANDROID_PLATFORM" ]
++
++  deps = [
++    ":wifi_manager_java",
++    "//plugins/interfaces/native:ace_plugin_util_android",
++  ]
++
++  subsystem_name = "plugins"
++  part_name = "wifi_manager"
++}
+diff --git a/wifi_manager/android/java/jni/wifi_device_impl.cpp b/wifi_manager/android/java/jni/wifi_device_impl.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..c18cbf22f9941bcecbc7c7e047cac2a2a9533268
+--- /dev/null
++++ b/wifi_manager/android/java/jni/wifi_device_impl.cpp
+@@ -0,0 +1,55 @@
++/*
++ * Copyright (C) 2024 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include "wifi_device_impl.h"
++
++#include <cstring>
++
++#include "log.h"
++#include "wifi_device_jni.h"
++
++namespace OHOS {
++namespace Plugin {
++std::shared_ptr<WifiDevice> WifiDevice::GetInstance(int systemAbilityId, int instId)
++{
++    return std::make_shared<WifiDeviceImpl>();
++}
++
++ErrCode WifiDeviceImpl::GetLinkedInfo(WifiLinkedInfo& info)
++{
++    return WiFiDeviceJni::GetInstance().GetLinkedInfo(info);
++}
++
++ErrCode WifiDeviceImpl::IsWifiActive(bool& bActive)
++{
++    return WiFiDeviceJni::GetInstance().IsWifiActive(bActive);
++}
++
++ErrCode WifiDeviceImpl::IsConnected(bool& isConnected)
++{
++    return WiFiDeviceJni::GetInstance().IsConnected(isConnected);
++}
++
++ErrCode WifiDeviceImpl::On(const std::string& key)
++{
++    return WiFiDeviceJni::GetInstance().On(key);
++}
++
++ErrCode WifiDeviceImpl::Off(const std::string& key)
++{
++    return WiFiDeviceJni::GetInstance().Off(key);
++}
++} // namespace Plugin
++} // namespace OHOS
+\ No newline at end of file
+diff --git a/wifi_manager/android/java/jni/wifi_device_impl.h b/wifi_manager/android/java/jni/wifi_device_impl.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..a7d824670cb517670be4b482272be3bd041663b6
+--- /dev/null
++++ b/wifi_manager/android/java/jni/wifi_device_impl.h
+@@ -0,0 +1,38 @@
++/*
++ * Copyright (C) 2024 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#ifndef PLUGINS_WIFI_MANAGER_ANDROID_JAVA_JNI_WIFI_DEVICE_IMPL_H
++#define PLUGINS_WIFI_MANAGER_ANDROID_JAVA_JNI_WIFI_DEVICE_IMPL_H
++
++#include <map>
++#include <mutex>
++
++#include "plugins/wifi_manager/wifi_device.h"
++
++namespace OHOS {
++namespace Plugin {
++class WifiDeviceImpl : public WifiDevice {
++public:
++    WifiDeviceImpl() = default;
++    virtual ~WifiDeviceImpl() = default;
++    virtual ErrCode GetLinkedInfo(WifiLinkedInfo& info) override;
++    virtual ErrCode IsWifiActive(bool& bActive) override;
++    virtual ErrCode IsConnected(bool& isConnected) override;
++    virtual ErrCode On(const std::string& key) override;
++    virtual ErrCode Off(const std::string& key) override;
++};
++} // namespace Plugin
++} // namespace OHOS
++#endif
+\ No newline at end of file
+diff --git a/wifi_manager/android/java/jni/wifi_device_jni.cpp b/wifi_manager/android/java/jni/wifi_device_jni.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..4894ae3d2d5057c880034495c43527c9b54c59f7
+--- /dev/null
++++ b/wifi_manager/android/java/jni/wifi_device_jni.cpp
+@@ -0,0 +1,256 @@
++/*
++ * Copyright (C) 2024 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include "wifi_device_jni.h"
++
++#include <codecvt>
++#include <jni.h>
++#include <locale>
++
++#include "log.h"
++#include "wifi_receive_callback.h"
++
++#include "plugins/interfaces/native/inner_api/plugin_utils_inner.h"
++#include "plugins/interfaces/native/plugin_utils.h"
++#include "nlohmann/json.hpp"
++
++namespace OHOS {
++namespace Plugin {
++namespace {
++const char WIFIMANAGER_CLASS_NAME[] = "ohos/ace/plugin/wifimanager/WifiDevicePlugin";
++static const JNINativeMethod METHODS[] = {
++    { "nativeInit", "()V", reinterpret_cast<void*>(WiFiDeviceJni::NativeInit) },
++    { "nativeReceiveCallback", "(Ljava/lang/String;J)V",
++        reinterpret_cast<void*>(WiFiDeviceJni::NativeReceiveCallback) },
++};
++
++static const char METHOD_GET_LINKED_INFO[] = "getLinkedInfo";
++static const char METHOD_IS_WIFI_ACTIVE[] = "isWifiActive";
++static const char METHOD_IS_CONNECTED[] = "isConnected";
++static const char METHOD_ON[] = "on";
++static const char METHOD_OFF[] = "off";
++
++static const char SIGNATURE_GET_LINKED_INFO[] = "()Ljava/lang/String;";
++static const char SIGNATURE_IS_WIFI_ACTIVE[] = "()Z";
++static const char SIGNATURE_IS_CONNECTED[] = "()Z";
++static const char SIGNATURE_ON[] = "(Ljava/lang/String;)V";
++static const char SIGNATURE_OFF[] = "(Ljava/lang/String;)V";
++
++struct {
++    jmethodID getLinkedInfo;
++    jmethodID isWifiActive;
++    jmethodID isConnected;
++    jmethodID on;
++    jmethodID off;
++    jobject globalRef;
++} g_pluginClass;
++} // namespace
++WiFiDeviceJni& WiFiDeviceJni::GetInstance()
++{
++    static WiFiDeviceJni instance;
++    return instance;
++}
++
++bool WiFiDeviceJni::Register(void* env)
++{
++    LOGI("WiFiDeviceJni JNI: Register");
++    auto* jniEnv = static_cast<JNIEnv*>(env);
++    CHECK_NULL_RETURN(jniEnv, false);
++    jclass cls = jniEnv->FindClass(WIFIMANAGER_CLASS_NAME);
++    CHECK_NULL_RETURN(cls, false);
++    bool ret = jniEnv->RegisterNatives(cls, METHODS, sizeof(METHODS) / sizeof(METHODS[0])) == 0;
++    jniEnv->DeleteLocalRef(cls);
++    if (!ret) {
++        LOGE("WiFiDeviceJni JNI: RegisterNatives fail.");
++        return false;
++    }
++    return true;
++}
++
++void WiFiDeviceJni::NativeInit(JNIEnv* env, jobject jobj)
++{
++    LOGI("WiFiDeviceJni JNI: NativeInit");
++    CHECK_NULL_VOID(env);
++    g_pluginClass.globalRef = env->NewGlobalRef(jobj);
++    CHECK_NULL_VOID(g_pluginClass.globalRef);
++    jclass cls = env->GetObjectClass(jobj);
++    CHECK_NULL_VOID(cls);
++
++    g_pluginClass.getLinkedInfo = env->GetMethodID(cls, METHOD_GET_LINKED_INFO, SIGNATURE_GET_LINKED_INFO);
++    CHECK_NULL_VOID(g_pluginClass.getLinkedInfo);
++
++    g_pluginClass.isWifiActive = env->GetMethodID(cls, METHOD_IS_WIFI_ACTIVE, SIGNATURE_IS_WIFI_ACTIVE);
++    CHECK_NULL_VOID(g_pluginClass.isWifiActive);
++
++    g_pluginClass.isConnected = env->GetMethodID(cls, METHOD_IS_CONNECTED, SIGNATURE_IS_CONNECTED);
++    CHECK_NULL_VOID(g_pluginClass.isConnected);
++
++    g_pluginClass.on = env->GetMethodID(cls, METHOD_ON, SIGNATURE_ON);
++    CHECK_NULL_VOID(g_pluginClass.on);
++
++    g_pluginClass.off = env->GetMethodID(cls, METHOD_OFF, SIGNATURE_OFF);
++    CHECK_NULL_VOID(g_pluginClass.off);
++
++    env->DeleteLocalRef(cls);
++}
++
++static std::string UTF16StringToUTF8String(const char16_t* chars, size_t len)
++{
++    std::u16string u16_string(chars, len);
++    return std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> {}.to_bytes(u16_string);
++}
++
++static std::string JavaStringToString(JNIEnv* env, jstring str)
++{
++    if (env == nullptr || str == nullptr) {
++        return "";
++    }
++    const jchar* chars = env->GetStringChars(str, NULL);
++    if (chars == nullptr) {
++        return "";
++    }
++    std::string u8_string =
++        UTF16StringToUTF8String(reinterpret_cast<const char16_t*>(chars), env->GetStringLength(str));
++    env->ReleaseStringChars(str, chars);
++    return u8_string;
++}
++
++ErrCode WiFiDeviceJni::GetLinkedInfo(WifiLinkedInfo& info)
++{
++    auto env = ARKUI_X_Plugin_GetJniEnv();
++
++    CHECK_NULL_RETURN(env, ErrCode::WIFI_OPT_FAILED);
++    CHECK_NULL_RETURN(g_pluginClass.globalRef, ErrCode::WIFI_OPT_FAILED);
++    CHECK_NULL_RETURN(g_pluginClass.getLinkedInfo, ErrCode::WIFI_OPT_FAILED);
++    jstring jinfo = (jstring)env->CallObjectMethod(g_pluginClass.globalRef, g_pluginClass.getLinkedInfo);
++    if (env->ExceptionCheck()) {
++        LOGE("WiFiDeviceJni JNI: call GetLinkedInfo has exception");
++        env->ExceptionDescribe();
++        env->ExceptionClear();
++        return ErrCode::WIFI_OPT_FAILED;
++    }
++    std::string jsonobject = JavaStringToString(env, jinfo);
++    JavaWifiLinkedInfoToOh(jsonobject, info);
++    LOGI("WiFiDeviceJni JNI: call GetLinkedInfo has success");
++    return ErrCode::WIFI_OPT_SUCCESS;
++}
++
++ErrCode WiFiDeviceJni::IsWifiActive(bool& bActive)
++{
++    auto env = ARKUI_X_Plugin_GetJniEnv();
++
++    CHECK_NULL_RETURN(env, ErrCode::WIFI_OPT_FAILED);
++    CHECK_NULL_RETURN(g_pluginClass.globalRef, ErrCode::WIFI_OPT_FAILED);
++    CHECK_NULL_RETURN(g_pluginClass.isWifiActive, ErrCode::WIFI_OPT_FAILED);
++    jboolean jisWfifActibe = env->CallBooleanMethod(g_pluginClass.globalRef, g_pluginClass.isWifiActive);
++    if (env->ExceptionCheck()) {
++        LOGE("WiFiDeviceJni JNI: call IsWifiActive has exception");
++        env->ExceptionDescribe();
++        env->ExceptionClear();
++        bActive = false;
++        return ErrCode::WIFI_OPT_FAILED;
++    }
++    bActive = jisWfifActibe == JNI_TRUE ? true : false;
++    LOGI("WiFiDeviceJni JNI: call IsWifiActive has success");
++    return ErrCode::WIFI_OPT_SUCCESS;
++}
++
++ErrCode WiFiDeviceJni::IsConnected(bool& isConnected)
++{
++    auto env = ARKUI_X_Plugin_GetJniEnv();
++
++    CHECK_NULL_RETURN(env, ErrCode::WIFI_OPT_FAILED);
++    CHECK_NULL_RETURN(g_pluginClass.globalRef, ErrCode::WIFI_OPT_FAILED);
++    CHECK_NULL_RETURN(g_pluginClass.isConnected, ErrCode::WIFI_OPT_FAILED);
++    jboolean jisConnected = env->CallBooleanMethod(g_pluginClass.globalRef, g_pluginClass.isConnected);
++    if (env->ExceptionCheck()) {
++        LOGE("WiFiDeviceJni JNI: call IsConnected has exception");
++        env->ExceptionDescribe();
++        env->ExceptionClear();
++        isConnected = false;
++        return ErrCode::WIFI_OPT_FAILED;
++    }
++    isConnected = jisConnected == JNI_TRUE ? true : false;
++    LOGI("WiFiDeviceJni JNI: call IsConnected has success");
++    return ErrCode::WIFI_OPT_SUCCESS;
++}
++
++ErrCode WiFiDeviceJni::On(const std::string& key)
++{
++    auto env = ARKUI_X_Plugin_GetJniEnv();
++
++    CHECK_NULL_RETURN(env, ErrCode::WIFI_OPT_FAILED);
++    CHECK_NULL_RETURN(g_pluginClass.globalRef, ErrCode::WIFI_OPT_FAILED);
++    CHECK_NULL_RETURN(g_pluginClass.on, ErrCode::WIFI_OPT_FAILED);
++    jstring jMethodOnKey = env->NewStringUTF(key.c_str());
++    env->CallObjectMethod(g_pluginClass.globalRef, g_pluginClass.on, jMethodOnKey);
++    if(env->ExceptionCheck()) {
++        LOGE("WiFiDeviceJni JNI: call On has exception");
++        env->ExceptionDescribe();
++        env->ExceptionClear();
++        return ErrCode::WIFI_OPT_FAILED;
++    }
++    LOGI("WiFiDeviceJni JNI: call On key is %s", key.c_str());
++    return ErrCode::WIFI_OPT_SUCCESS;
++}
++
++ErrCode WiFiDeviceJni::Off(const std::string& key)
++{
++    auto env = ARKUI_X_Plugin_GetJniEnv();
++
++    CHECK_NULL_RETURN(env, ErrCode::WIFI_OPT_FAILED);
++    CHECK_NULL_RETURN(g_pluginClass.globalRef, ErrCode::WIFI_OPT_FAILED);
++    CHECK_NULL_RETURN(g_pluginClass.off, ErrCode::WIFI_OPT_FAILED);
++    jstring jMethodOffKey = env->NewStringUTF(key.c_str());
++    env->CallObjectMethod(g_pluginClass.globalRef, g_pluginClass.off , jMethodOffKey);
++    if(env->ExceptionCheck()) {
++        LOGE("WiFiDeviceJni JNI: call Off has exception");
++        env->ExceptionDescribe();
++        env->ExceptionClear();
++        return ErrCode::WIFI_OPT_FAILED;
++    }
++    LOGI("WiFiDeviceJni JNI: call off key is %s", key.c_str());
++    return ErrCode::WIFI_OPT_SUCCESS;
++}
++
++void WiFiDeviceJni::JavaWifiLinkedInfoToOh(const std::string& event, WifiLinkedInfo& info)
++{
++    if (!event.empty()) {
++        nlohmann::json jsonData = nlohmann::json::parse(event);
++        if (jsonData.is_discarded()) {
++            LOGE("WiFiDeviceJni JNI: nlohmann json Parse failed.");
++            return;
++        }
++        info.ssid = jsonData["ssid"];
++        info.bssid = jsonData["bssid"];
++        info.networkId = jsonData["networkId"];
++        info.rssi = jsonData["rssi"];
++        info.linkSpeed = jsonData["linkSpeed"];
++        info.frequency = jsonData["frequency"];
++        info.ifHiddenSSID = jsonData["isHidden"];
++    } else {
++        LOGE("WiFiDeviceJni JNI: nlohmann json event is empty");
++    }
++}
++
++void WiFiDeviceJni::NativeReceiveCallback(JNIEnv* env, jobject jobj, jstring key, jint code)
++{
++    std::string skey = JavaStringToString(env, key);
++    auto nativecode = static_cast<int32_t>(code);
++    LOGI("WiFiDeviceJni JNI: NativeReceiveCallback skey is %s code is %d", skey.c_str(), nativecode);
++    WifiReceiveCallback::ReceiveCallback(skey, nativecode);
++}
++} // namespace Plugin
++} // namespace OHOS
+\ No newline at end of file
+diff --git a/wifi_manager/android/java/jni/wifi_device_jni.h b/wifi_manager/android/java/jni/wifi_device_jni.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..61ce9b1bee4ca18141943e95625726ddf38f9aab
+--- /dev/null
++++ b/wifi_manager/android/java/jni/wifi_device_jni.h
+@@ -0,0 +1,52 @@
++/*
++ * Copyright (C) 2024 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#ifndef PLUGINS_WIFI_MANAGER_ANDROID_JAVA_JNI_WIFI_DEVICE_JNI_H
++#define PLUGINS_WIFI_MANAGER_ANDROID_JAVA_JNI_WIFI_DEVICE_JNI_H
++
++#include <jni.h>
++#include <string>
++
++#include "wifi_device_impl.h"
++
++#include "plugins/wifi_manager/wifi_errcode.h"
++#include "plugins/wifi_manager/wifi_msg.h"
++
++namespace OHOS {
++namespace Plugin {
++class WiFiDeviceJni final {
++public:
++    WiFiDeviceJni() = default;
++    ~WiFiDeviceJni() = default;
++
++    static WiFiDeviceJni& GetInstance();
++    static bool Register(void* env);
++    void RegisterWiFiManager();
++    // Called by Java
++    static void NativeInit(JNIEnv* env, jobject jobj);
++    static void NativeReceiveCallback(JNIEnv* env, jobject jobj, jstring key, jint code);
++    // Called by C++
++    ErrCode GetLinkedInfo(WifiLinkedInfo& info);
++    ErrCode IsWifiActive(bool& bActive);
++    ErrCode IsConnected(bool& isConnected);
++    ErrCode On(const std::string& key);
++    ErrCode Off(const std::string& key);
++
++private:
++    void JavaWifiLinkedInfoToOh(const std::string& event, WifiLinkedInfo& info);
++};
++} // namespace Plugin
++} // namespace OHOS
++#endif
+\ No newline at end of file
+diff --git a/wifi_manager/android/java/jni/wifi_receive_callback.cpp b/wifi_manager/android/java/jni/wifi_receive_callback.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..456218a4a055804d9df9ab25131baeb8826f654e
+--- /dev/null
++++ b/wifi_manager/android/java/jni/wifi_receive_callback.cpp
+@@ -0,0 +1,30 @@
++/*
++ * Copyright (c) 2023 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include "wifi_receive_callback.h"
++
++#include "log.h"
++
++#include "plugins/wifi_manager/wifi_callback.h"
++#include "plugins/wifi_manager/wifi_device.h"
++
++namespace OHOS {
++namespace Plugin {
++void WifiReceiveCallback::ReceiveCallback(const std::string& key, int code)
++{
++    WifiCallback::GetInstance().SendCallback(key, code);
++}
++} // namespace Plugin
++} // namespace OHOS
+diff --git a/wifi_manager/android/java/jni/wifi_receive_callback.h b/wifi_manager/android/java/jni/wifi_receive_callback.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..739feb00f1f87974d19a48a4cdac02feb2a69dff
+--- /dev/null
++++ b/wifi_manager/android/java/jni/wifi_receive_callback.h
+@@ -0,0 +1,30 @@
++/*
++ * Copyright (c) 2024 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#ifndef PLUGINS_WIFI_MANAGER_ANDROID_JAVA_JNI_WIFI_RECEIVE_CALLBACK_H
++#define PLUGINS_WIFI_MANAGER_ANDROID_JAVA_JNI_WIFI_RECEIVE_CALLBACK_H
++
++#include <string>
++
++namespace OHOS {
++namespace Plugin {
++class WifiReceiveCallback {
++public:
++    static void ReceiveCallback(const std::string& key, int code);
++};
++} // namespace Plugin
++} // namespace OHOS
++
++#endif // PLUGINS_WIFI_MANAGER_ANDROID_JAVA_JNI_WIFI_RECEIVE_CALLBACK_H
+\ No newline at end of file
+diff --git a/wifi_manager/android/java/src/ohos/ace/plugin/wifimanager/WifiBroadcastInterface.java b/wifi_manager/android/java/src/ohos/ace/plugin/wifimanager/WifiBroadcastInterface.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..1debb11aa1d237e6349250e260f0120e0a04e80e
+--- /dev/null
++++ b/wifi_manager/android/java/src/ohos/ace/plugin/wifimanager/WifiBroadcastInterface.java
+@@ -0,0 +1,28 @@
++ package ohos.ace.plugin.wifimanager;
++
++ public interface WifiBroadcastInterface {
++    // 0-已断开
++    int WIFI_STATE_DISCONNECT = 0;
++
++    // 1-已连接
++    int WIFI_STATE_LINK = 1;
++
++    // 正在打开WiFi
++    int WIFI_STATE_ENABLING = 2;
++
++    // WiFi已打开
++    int WIFI_STATE_ENABLED = 3;
++
++    // 正在关闭WiFi
++    int WIFI_STATE_DISABLING = 0;
++
++    // WiFi已关闭
++    int WIFI_STATE_DISABLED = 1;
++
++    // WiFi状态未知
++    int WIFI_STATE_UNKNOWN = 4;
++
++    void wifiConnectState(int state);
++    void wifiSwitchState(int state);
++    
++}
+\ No newline at end of file
+diff --git a/wifi_manager/android/java/src/ohos/ace/plugin/wifimanager/WifiBroadcastReceiver.java b/wifi_manager/android/java/src/ohos/ace/plugin/wifimanager/WifiBroadcastReceiver.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..b813af6a1eb8cfad1c160e795888fbbbf0208919
+--- /dev/null
++++ b/wifi_manager/android/java/src/ohos/ace/plugin/wifimanager/WifiBroadcastReceiver.java
+@@ -0,0 +1,142 @@
++package ohos.ace.plugin.wifimanager;
++
++import android.content.BroadcastReceiver;
++import android.content.Context;
++import android.content.Intent;
++import android.content.IntentFilter;
++import android.net.ConnectivityManager;
++import android.net.NetworkInfo;
++import android.net.wifi.WifiManager;
++import android.util.Log;
++
++/**
++ * 监听wifi的开关状态与网络连接状态的广播
++ */
++
++public class WifiBroadcastReceiver {
++    private static final String LOG_TAG = "WifiBroadcastReceiver";
++
++    private Context mContext;
++
++    private WifiConnectReceiver mWifiConnectReceiver;
++
++    private WifiSwitchBroadcastReceiver mWifiSwitchReceiver;
++
++    private WifiBroadcastInterface mWifiInterface;
++
++    public WifiBroadcastReceiver(Context mContext, WifiBroadcastInterface mWifiInterface) {
++        this.mContext = mContext;
++        this.mWifiInterface = mWifiInterface;
++    }
++
++
++    /**
++     * wifi链接状态注册监听广播
++     */
++    public void registerConnectReceiver() {
++        IntentFilter filter = new IntentFilter();
++        filter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
++        mWifiConnectReceiver = new WifiConnectReceiver();
++        mContext.registerReceiver(mWifiConnectReceiver, filter);
++        Log.i(LOG_TAG, "registerConnectReceiver");
++    }
++
++    /**
++     * wifi链接状态取消注册监听广播
++     */
++    public void unRegisterConnectReceiver() {
++        if (mWifiConnectReceiver != null) {
++            mContext.unregisterReceiver(mWifiConnectReceiver);
++            Log.i(LOG_TAG, "unRegisterConnectReceiver");
++        }
++    }
++
++    /**
++     * wifi链接状态的监听广播
++     */
++    class WifiConnectReceiver extends BroadcastReceiver {
++
++        @Override
++        public void onReceive(Context context, Intent intent) {
++            // 当前接受到的广播的标识(行动/意图)
++            String action = intent.getAction();
++            if (action.equals(ConnectivityManager.CONNECTIVITY_ACTION)) {
++                ConnectivityManager connectivityManager = (ConnectivityManager) mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
++                NetworkInfo info = connectivityManager.getActiveNetworkInfo();
++                if (info != null && info.isAvailable()) {
++                    String name = info.getTypeName();
++                    if (mWifiInterface != null) {
++                        if (name.equals("WIFI")) {
++                            mWifiInterface.wifiConnectState(WifiBroadcastInterface.WIFI_STATE_LINK);
++                        } else {
++                            mWifiInterface.wifiConnectState(WifiBroadcastInterface.WIFI_STATE_DISCONNECT);
++                        }
++                    }
++                } else {
++                    if (mWifiInterface != null) {
++                        mWifiInterface.wifiConnectState(WifiBroadcastInterface.WIFI_STATE_DISCONNECT);
++                    }
++                }
++            }
++        }
++    }
++
++    /**
++     * wifi开关状态的注册广播
++     */
++    public void registerSwitchReceiver() {
++        IntentFilter filter = new IntentFilter();
++        filter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
++        mWifiSwitchReceiver = new WifiSwitchBroadcastReceiver();
++        mContext.registerReceiver(mWifiSwitchReceiver, filter);
++        Log.i(LOG_TAG, "registerSwitchReceiver");
++    }
++
++    /**
++     * wifi开关状态的取消注册广播
++     */
++    public void unRegisterSwitchReceiver() {
++        if (mWifiSwitchReceiver != null) {
++            mContext.unregisterReceiver(mWifiSwitchReceiver);
++            Log.i(LOG_TAG, "unRegisterSwitchReceiver");
++        }
++    }
++
++    /**
++     * wifi开关状态的监听广播
++     */
++    class WifiSwitchBroadcastReceiver extends BroadcastReceiver {
++
++        @Override
++        public void onReceive(Context context, Intent intent) {
++            int wifiState = intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE, 0);
++            switch (wifiState) {
++                case WifiManager.WIFI_STATE_DISABLED:
++                    if (mWifiInterface != null) {
++                        mWifiInterface.wifiSwitchState(WifiBroadcastInterface.WIFI_STATE_DISABLED);
++                    }
++                    break;
++                case WifiManager.WIFI_STATE_DISABLING:
++                    if (mWifiInterface != null) {
++                        mWifiInterface.wifiSwitchState(WifiBroadcastInterface.WIFI_STATE_DISABLING);
++                    }
++                    break;
++                case WifiManager.WIFI_STATE_ENABLED:
++                    if (mWifiInterface != null) {
++                        mWifiInterface.wifiSwitchState(WifiBroadcastInterface.WIFI_STATE_ENABLED);
++                    }
++                    break;
++                case WifiManager.WIFI_STATE_ENABLING:
++                    if (mWifiInterface != null) {
++                        mWifiInterface.wifiSwitchState(WifiBroadcastInterface.WIFI_STATE_ENABLING);
++                    }
++                    break;
++                case WifiManager.WIFI_STATE_UNKNOWN:
++                    if (mWifiInterface != null) {
++                        mWifiInterface.wifiSwitchState(WifiBroadcastInterface.WIFI_STATE_UNKNOWN);
++                    }
++                    break;
++            }
++        }
++    }
++}
+diff --git a/wifi_manager/android/java/src/ohos/ace/plugin/wifimanager/WifiDevicePlugin.java b/wifi_manager/android/java/src/ohos/ace/plugin/wifimanager/WifiDevicePlugin.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..536025f0df4aa368b4c4335cff48fb0821985da7
+--- /dev/null
++++ b/wifi_manager/android/java/src/ohos/ace/plugin/wifimanager/WifiDevicePlugin.java
+@@ -0,0 +1,198 @@
++/*
++ * Copyright (c) 2023 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package ohos.ace.plugin.wifimanager;
++
++import android.content.Context;
++import android.text.TextUtils;
++import android.util.Log;
++import android.net.ConnectivityManager;
++import android.net.NetworkInfo;
++
++public class WifiDevicePlugin implements WifiBroadcastInterface{
++    private static final String LOG_TAG = "WifiDevicePlugin";
++ 
++    private static final String WIFI_STATE_CHANGE = "wifiStateChange";
++
++    private static final String WIFI_CONNECTION_CHANGE = "wifiConnectionChange";
++
++    private Context context;
++
++    private WifiDeviceUtils mWifiDeviceUtils;
++
++    private WifiBroadcastReceiver mWifiReceiver;
++
++    /**
++     * WifiDevicePlugin
++     *
++     * @param context context of the application
++     */
++    public WifiDevicePlugin(Context context) {
++        if (context != null) {
++            this.context = context;
++        } else {
++            Log.e(LOG_TAG, "context is null");
++        }
++        nativeInit();
++        mWifiDeviceUtils = new WifiDeviceUtils(context);
++        mWifiReceiver = new WifiBroadcastReceiver(context, this);
++    }
++
++    /**
++     * WifiDevicePlugin
++     *
++     * @param context context of the application
++     * @param isNativeInit call nativeInit or not
++     */
++    public WifiDevicePlugin(Context context, boolean isNativeInit) {
++        if (context != null) {
++            this.context = context;
++        } else {
++            Log.e(LOG_TAG, "parameter context is null");
++        }
++        if (isNativeInit) {
++            nativeInit();
++        }
++        mWifiDeviceUtils = new WifiDeviceUtils(this.context);
++        mWifiReceiver = new WifiBroadcastReceiver(this.context, this);
++    }
++
++    protected native void nativeInit();
++
++    // 当触发事件时调用此方法
++    protected native void nativeReceiveCallback(String key, long code);
++
++    public String getLinkedInfo() {
++        if (mWifiDeviceUtils == null) {
++            mWifiDeviceUtils = new WifiDeviceUtils(context);
++        }
++        String wifiInfo_json = "";
++        if (mWifiDeviceUtils.getWifiActive()) {
++            wifiInfo_json = mWifiDeviceUtils.getWifiInfo();
++        }
++        return wifiInfo_json;
++    }
++
++    public boolean isWifiActive() {
++        if (mWifiDeviceUtils == null) {
++            mWifiDeviceUtils = new WifiDeviceUtils(context);
++        }
++        return mWifiDeviceUtils.getWifiActive();
++    }
++
++    public boolean isConnected() {
++        boolean isConnectedWifi = false;
++        if (mWifiDeviceUtils == null) {
++            mWifiDeviceUtils = new WifiDeviceUtils(context);
++        }
++        try{
++            isConnectedWifi = mWifiDeviceUtils.getIsConnected();
++        } catch (Exception exception) {
++            Log.e(LOG_TAG, "isConnected exception");
++        }
++        return isConnectedWifi;
++    }
++    
++    public void on(String value) {
++        try{
++            if (TextUtils.equals(value, WIFI_STATE_CHANGE)) { // 查询WLAN是否已使能
++              if (mWifiReceiver == null) {
++                    mWifiReceiver = new WifiBroadcastReceiver(context, this);
++                }
++                mWifiReceiver.registerSwitchReceiver();
++            } else if (TextUtils.equals(value, WIFI_CONNECTION_CHANGE)) { // 查询WLAN是否已连接
++                if (mWifiReceiver == null) {
++                    mWifiReceiver = new WifiBroadcastReceiver(context, this);
++                }
++                mWifiReceiver.registerConnectReceiver();
++            } else {
++                Log.e(LOG_TAG, "on is invalid");
++            }
++        } catch (Exception exception) {
++            Log.e(LOG_TAG, "on exception");
++        }
++    }
++    
++    public void off(String value) {
++        try{
++            if (TextUtils.equals(value, WIFI_STATE_CHANGE)) {
++                if (mWifiReceiver == null) {
++                    mWifiReceiver = new WifiBroadcastReceiver(context, this);
++                }
++                mWifiReceiver.unRegisterSwitchReceiver();
++            } else if (TextUtils.equals(value, WIFI_CONNECTION_CHANGE)) {
++                if (mWifiReceiver == null) {
++                    mWifiReceiver = new WifiBroadcastReceiver(context, this);
++                }
++                mWifiReceiver.unRegisterConnectReceiver();
++            } else {
++                Log.e(LOG_TAG, "off is invalid");
++            }
++        } catch (Exception exception) {
++            Log.e(LOG_TAG, "off exception");
++        }
++    }
++
++    /**
++     * 监听wifi开关状态变化
++     *
++     */
++    @Override
++    public void wifiSwitchState(int state) {
++        switch (state) {
++            case WifiBroadcastInterface.WIFI_STATE_DISABLED:
++                // 0-未激活
++                nativeReceiveCallback(WIFI_STATE_CHANGE, 0);
++                break;
++            case WifiBroadcastInterface.WIFI_STATE_DISABLING:
++                // 3-去激活中
++                nativeReceiveCallback(WIFI_STATE_CHANGE, 3);
++                break;
++            case WifiBroadcastInterface.WIFI_STATE_ENABLED:
++                // 1-已激活
++                nativeReceiveCallback(WIFI_STATE_CHANGE, 1);
++                break;
++            case WifiBroadcastInterface.WIFI_STATE_ENABLING:
++                // 2-激活中
++                nativeReceiveCallback(WIFI_STATE_CHANGE, 2);
++                break;
++            default:
++                Log.e(LOG_TAG, "WifiDevicePlugins wifiSwitchState invalid parameter");
++                break;
++        }
++    }
++
++    /**
++     * 监听wifi连接状态
++     *
++     */
++    @Override
++    public void wifiConnectState(int state) {
++        switch (state) {
++            case WifiBroadcastInterface.WIFI_STATE_DISCONNECT:
++                // 0-已断开
++                nativeReceiveCallback(WIFI_CONNECTION_CHANGE, 0);
++                break;
++            case WifiBroadcastInterface.WIFI_STATE_LINK:
++                // 1-已连接
++                nativeReceiveCallback(WIFI_CONNECTION_CHANGE, 1);
++                break;
++            default:
++                Log.e(LOG_TAG, "WifiDevicePlugins wifiConnectionChange invalid parameter");
++                break;
++        }
++    }
++
++}
+\ No newline at end of file
+diff --git a/wifi_manager/android/java/src/ohos/ace/plugin/wifimanager/WifiDeviceUtils.java b/wifi_manager/android/java/src/ohos/ace/plugin/wifimanager/WifiDeviceUtils.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..97f0e2aaddc593cb2a3956b77e78a17e7cf8dfc0
+--- /dev/null
++++ b/wifi_manager/android/java/src/ohos/ace/plugin/wifimanager/WifiDeviceUtils.java
+@@ -0,0 +1,101 @@
++package ohos.ace.plugin.wifimanager;
++
++import android.content.Context;
++import android.net.ConnectivityManager;
++import android.net.NetworkInfo;
++import android.net.wifi.WifiInfo;
++import android.net.wifi.WifiManager;
++import android.text.TextUtils;
++import android.os.Build;
++import android.util.Log;
++
++import org.json.JSONException;
++import org.json.JSONObject;
++
++public class WifiDeviceUtils {
++    private static final String LOG_TAG = "WifiDeviceUtils";
++
++    private Context mContext;
++ 
++    private WifiManager mWifiManager;
++
++    public WifiDeviceUtils(Context mContext) {
++        this.mContext = mContext;
++        mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
++    }
++
++    /**
++     * 获取链接WIFI的信息
++     */
++    public String getWifiInfo() {
++        WifiInfo wifiInfo = mWifiManager.getConnectionInfo();
++        if (wifiInfo == null) {
++            return "";
++        }
++        String ssid = wifiInfo.getSSID();
++        if (!TextUtils.isEmpty(ssid) && ssid.contains("\"")) {
++            ssid = ssid.replace("\"", "");
++        }
++        String bssid = wifiInfo.getBSSID();
++        int networkId = wifiInfo.getNetworkId();
++        int rssi = wifiInfo.getRssi();
++        int linkSpeed = wifiInfo.getLinkSpeed();
++        int frequency = wifiInfo.getFrequency();
++        boolean isHidden = wifiInfo.getHiddenSSID();
++        String macAddress = wifiInfo.getMacAddress();
++        int ipAddress = wifiInfo.getIpAddress();
++        JSONObject jsonObject = new JSONObject();
++        try {
++            jsonObject.put("ssid", ssid);
++            jsonObject.put("bssid", bssid);
++            jsonObject.put("networkId", networkId);
++            jsonObject.put("rssi", rssi);
++            jsonObject.put("linkSpeed", linkSpeed);
++            jsonObject.put("frequency", frequency);
++            jsonObject.put("isHidden", isHidden);
++            return jsonObject.toString();
++        } catch (JSONException exception) {
++            Log.e(LOG_TAG, "WifiDeviceUtils JSONException");
++        }
++        return "";
++    }
++
++    /**
++     * 判断WiFi开关是否打开状态
++     */
++    public boolean getWifiActive() {
++        if (mWifiManager == null) {
++            Log.e(LOG_TAG, "WifiDeviceUtils mWifiManager is null");
++            return false;
++        }
++        if (mWifiManager.getWifiState() == WifiManager.WIFI_STATE_ENABLED) { // 3
++            return true;
++        }
++        return false;
++    }
++    
++    /**
++     * 获取WIFI链接状态
++     */
++    public boolean getIsConnected() {
++        boolean isConnected = false;
++        // 获取网络连接管理器
++        ConnectivityManager connectivityManager = (ConnectivityManager) mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
++
++        // 获取当前网络状态信息
++        NetworkInfo info = connectivityManager.getActiveNetworkInfo();
++        if (info != null && info.isAvailable()) {
++            // 当NetworkInfo不为空且是可用的情况下，获取当前网络的Type状态
++            // 根据NetworkInfo.getTypeName()判断当前网络
++            String name = info.getTypeName();
++            if (name.equals("WIFI")) {
++                isConnected = true;
++            } else {
++                isConnected = false;
++            }
++        } else {
++            isConnected = false;
++        }
++        return isConnected;
++    }
++}
+diff --git a/wifi_manager/ios/BUILD.gn b/wifi_manager/ios/BUILD.gn
+new file mode 100644
+index 0000000000000000000000000000000000000000..e4ce9b3fa68dce1e9770a004746d139ffd400512
+--- /dev/null
++++ b/wifi_manager/ios/BUILD.gn
+@@ -0,0 +1,42 @@
++# Copyright (c) 2024 Huawei Device Co., Ltd.
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#     http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++import("//build/ohos.gni")
++import("//foundation/arkui/ace_engine/ace_config.gni")
++
++ohos_source_set("wifi_manager_ios") {
++  include_dirs = [ "//plugins/wifi_manager" ]
++
++  sources = [
++    "wifi_device_impl.mm",
++    "wifi_utils_ios.mm",
++  ]
++
++  configs = [ "$ace_root:ace_config" ]
++
++  cflags_objc = [
++    "-fvisibility=default",
++    "-fobjc-weak",
++    "-fobjc-arc",
++    "-O0",
++  ]
++  frameworks = [ "SystemConfiguration.framework","NetworkExtension.framework" ]
++  defines = [ "IOS_PLATFORM" ]
++
++  cflags_objcc = cflags_objc
++
++  deps = [ "//plugins/interfaces/native:ace_plugin_util_ios" ]
++
++  subsystem_name = "plugins"
++  part_name = "wifi_manager"
++}
+diff --git a/wifi_manager/ios/wifi_device_impl.h b/wifi_manager/ios/wifi_device_impl.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..10bdacff5053d531135bdc7697f63438787eb022
+--- /dev/null
++++ b/wifi_manager/ios/wifi_device_impl.h
+@@ -0,0 +1,35 @@
++/*
++ * Copyright (c) 2024 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#ifndef PLUGINS_WIFI_MANAGER_IOS_WIFI_DEVICE_IMPL_H
++#define PLUGINS_WIFI_MANAGER_IOS_WIFI_DEVICE_IMPL_H
++
++#include "wifi_device.h"
++
++namespace OHOS {
++namespace Plugin {
++class WifiDeviceImpl : public WifiDevice {
++public:
++    WifiDeviceImpl() = default;
++    virtual ~WifiDeviceImpl() = default;
++    virtual ErrCode GetLinkedInfo(WifiLinkedInfo& info) override;
++    virtual ErrCode IsWifiActive(bool& bActive) override;
++    virtual ErrCode IsConnected(bool& isConnected) override;
++    virtual ErrCode On(const std::string& key) override;
++    virtual ErrCode Off(const std::string& key) override;
++};
++} // namespace Plugin
++} // namespace OHOS
++#endif // PLUGINS_WIFI_MANAGER_IOS_WIFI_DEVICE_IMPL_H
+\ No newline at end of file
+diff --git a/wifi_manager/ios/wifi_device_impl.mm b/wifi_manager/ios/wifi_device_impl.mm
+new file mode 100644
+index 0000000000000000000000000000000000000000..67c948de0cd3c70575634cf3dc7d6e19f57520fc
+--- /dev/null
++++ b/wifi_manager/ios/wifi_device_impl.mm
+@@ -0,0 +1,57 @@
++/*
++ * Copyright (C) 2024 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include "wifi_device_impl.h"
++
++#include <cstring>
++
++#include "log.h"
++#import "wifi_utils_ios.h"
++#include "wifi_callback.h"
++
++namespace OHOS {
++namespace Plugin {
++std::shared_ptr<WifiDevice> WifiDevice::GetInstance(int systemAbilityId, int instId) {
++    return std::make_shared<WifiDeviceImpl>();
++}
++
++ErrCode WifiDeviceImpl::GetLinkedInfo(WifiLinkedInfo& info) {
++    ErrCode errCode = [[wifi_utils_ios shareManager] getLinkedInfo:&info];
++    return errCode;
++}
++
++ErrCode WifiDeviceImpl::IsWifiActive(bool& bActive) {
++    ErrCode errCode = [[wifi_utils_ios shareManager] isWifiActive:&bActive];
++    return errCode;
++}
++
++ErrCode WifiDeviceImpl::IsConnected(bool& isConnected) {
++    ErrCode errcode = [[wifi_utils_ios shareManager] isConnected:&isConnected];
++    return errcode;
++}
++
++ErrCode WifiDeviceImpl::On(const std::string& key) {
++    NSString *ocKey = [NSString stringWithCString:key.c_str() encoding:[NSString defaultCStringEncoding]];
++    [[wifi_utils_ios shareManager] onChange:ocKey];
++    return ErrCode::WIFI_OPT_SUCCESS;
++}
++
++ErrCode WifiDeviceImpl::Off(const std::string& key) {
++    NSString *ocKey = [NSString stringWithCString:key.c_str() encoding:[NSString defaultCStringEncoding]];
++    [[wifi_utils_ios shareManager] offChange:ocKey];
++    return ErrCode::WIFI_OPT_SUCCESS;
++}
++} // namespace Plugin
++} // namespace OHOS
+\ No newline at end of file
+diff --git a/wifi_manager/ios/wifi_utils_ios.h b/wifi_manager/ios/wifi_utils_ios.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..ff3ff8d6b00091632dc54250ee55dd3c9216dd42
+--- /dev/null
++++ b/wifi_manager/ios/wifi_utils_ios.h
+@@ -0,0 +1,73 @@
++/*
++ * Copyright (c) 2024 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#ifndef WIFI_UTILS_IOS_H_
++#define WIFI_UTILS_IOS_H_
++
++#import <Foundation/Foundation.h>
++
++#include "wifi_errcode.h"
++#include "wifi_msg.h"
++
++NS_ASSUME_NONNULL_BEGIN
++
++using WifiErrCode = OHOS::Plugin::ErrCode;
++using LinkedInfo = OHOS::Plugin::WifiLinkedInfo;
++
++@interface wifi_utils_ios : NSObject
++
++/**
++ * 单例方法
++ */
+++ (instancetype)shareManager;
++
++/**
++ * 获取连接wifi信息
++ * @param info 获取到的当前连接wifi信息
++ * @return 结果以及错误码
++ */
++- (WifiErrCode)getLinkedInfo:(LinkedInfo*)info;
++
++/**
++ * 获取wifi开关状态
++ * @param bActive 获取到的开关状态
++ * @return 结果以及错误码
++ */
++- (WifiErrCode)isWifiActive:(bool*)bActive;
++
++/**
++ * 获取wifi连接状态
++ * @param isConnected 获取到的wifi连接状态
++ * @return 结果以及错误码
++ */
++- (WifiErrCode)isConnected:(bool*)isConnected;
++
++/**
++ * 启动监听
++ * @param key 监听的类型 wifiStateChange、wifiConnectionChange
++ */
++- (void)onChange:(NSString *)key;
++
++/**
++ * 取消监听
++ * @param key 监听的类型 wifiStateChange、wifiConnectionChange
++ */
++- (void)offChange:(NSString *)key;
++
++@end
++
++NS_ASSUME_NONNULL_END
++
++#endif // WIFI_UTILS_IOS_H_
+\ No newline at end of file
+diff --git a/wifi_manager/ios/wifi_utils_ios.mm b/wifi_manager/ios/wifi_utils_ios.mm
+new file mode 100644
+index 0000000000000000000000000000000000000000..0ac41e52d1ef63702606e7b0cad52ef398d1427b
+--- /dev/null
++++ b/wifi_manager/ios/wifi_utils_ios.mm
+@@ -0,0 +1,295 @@
++/*
++ * Copyright (c) 2024 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#import "wifi_utils_ios.h"
++#include "wifi_callback.h"
++
++// 获取当前连接wifi引入
++#import <SystemConfiguration/CaptiveNetwork.h>
++
++// 获取当前wifi开关引入
++#import <ifaddrs.h>
++#import <net/if.h>
++
++// Reachable引入，检测网络连接状态变化，Reachability类库
++#import <SystemConfiguration/SystemConfiguration.h>
++#import <netinet/in.h>
++typedef enum : NSInteger {
++    NotReachable = 0,
++    ReachableViaWiFi,
++    ReachableViaWWAN
++} NetworkStatus;
++
++// 获取wifi列表引入
++#import <NetworkExtension/NetworkExtension.h>
++
++@interface wifi_utils_ios()
++
++@property  BOOL isWifiActivity;
++@property  BOOL isWifiActivityFirst;
++@property (strong,nonatomic) NSTimer *stateTimer;
++
++@end
++
++@implementation wifi_utils_ios {
++    // 监听wifi连接状态使用
++    SCNetworkReachabilityRef reachabilityOnConnect;
++}
++
+++ (instancetype)shareManager {
++    static wifi_utils_ios* _manager = nil;
++    static dispatch_once_t onceToken;
++    dispatch_once(&onceToken, ^{
++        _manager = [[wifi_utils_ios alloc] init];
++    });
++    return _manager;
++}
++
++- (WifiErrCode)getLinkedInfo:(LinkedInfo*)info {
++    NSArray *interfaceNames = CFBridgingRelease(CNCopySupportedInterfaces());
++    for(NSString *interfaceName in interfaceNames) {
++        CFDictionaryRef dicRef = CNCopyCurrentNetworkInfo((__bridge  CFStringRef)(interfaceName));
++        NSDictionary *networkInfo = (__bridge id)dicRef;
++        if (networkInfo == nil) {
++            NSLog(@"wifi_utils_ios GetLinkedInfo oc CNCopyCurrentNetworkInfo nil");
++        }
++        NSString *ocssid = nil;
++        NSString *ocbssid = nil;
++        if (networkInfo[@"SSID"]) {
++            ocssid = networkInfo[@"SSID"];
++            if (networkInfo[@"BSSID"]) {
++                ocbssid = networkInfo[@"BSSID"];
++            }
++            (*info).ssid = ocssid.UTF8String;
++            (*info).bssid = ocbssid.UTF8String;
++            break;
++        }
++    }
++    return WifiErrCode::WIFI_OPT_SUCCESS;
++}
++
++- (WifiErrCode)isWifiActive:(bool*)bActive {
++    BOOL isNowWifiActive = [self isSystemWifiActive];
++    NSLog(@"wifi_utils_ios IsWifiActive oc get active is %d",isNowWifiActive);
++    *bActive = isNowWifiActive;
++    return WifiErrCode::WIFI_OPT_SUCCESS;
++}
++
++- (WifiErrCode)isConnected:(bool*)isConnected {
++    BOOL isConnectedNow = [self isSystemWifiConnected];
++    NSLog(@"wifi_utils_ios IsConnected oc get finish with %d",isConnectedNow);
++    *isConnected = isConnectedNow;
++    return WifiErrCode::WIFI_OPT_SUCCESS;
++}
++
++- (void)onChange:(NSString *)key {
++    NSString *inKey = key;
++    if ([inKey isEqualToString: @"wifiStateChange"]) {
++        [self listenWifiActive];
++    } else if ([inKey isEqualToString: @"wifiConnectionChange"]) {
++        [self listenWifiConnect];
++    } else {
++        NSLog(@"wifi_utils_ios on oc in type fail");
++    }
++}
++
++- (void)offChange:(NSString *)key {
++    NSString *inKey = key;
++    if ([inKey isEqualToString:@"wifiStateChange"]) {
++        [self unListenWifiActive];
++    } else if([inKey isEqualToString:@"wifiConnectionChange"]) {
++        [self unListenWifiConnect];
++    } else {
++        NSLog(@"wifi_utils_ios off oc in type fail");
++    }
++}
++
++- (BOOL)isSystemWifiActive {
++    NSCountedSet * cset = [NSCountedSet new];
++    struct ifaddrs *interfaces;
++    int success = getifaddrs(&interfaces);
++    if(!success){
++        for( struct ifaddrs *interface = interfaces; interface; interface = interface->ifa_next) {
++            if ( (interface->ifa_flags & IFF_UP) == IFF_UP ) {
++                [cset addObject:[NSString stringWithUTF8String:interface->ifa_name]];
++            }
++        }
++    }
++    return [cset countForObject:@"awdl0"] > 1 ? YES : NO;
++}
++
++- (BOOL)isSystemWifiConnected {
++    // 初始化SCNetworkReachabilityRef
++    struct sockaddr_in zeroAddress;
++    bzero(&zeroAddress, sizeof(zeroAddress));
++    zeroAddress.sin_len = sizeof(zeroAddress);
++    zeroAddress.sin_family = AF_INET;
++    const struct sockaddr * hostAddress = (const struct sockaddr *) &zeroAddress;
++    SCNetworkReachabilityRef reachability = SCNetworkReachabilityCreateWithAddress(kCFAllocatorDefault, hostAddress);
++    if (reachability == NULL)
++    {
++        NSLog(@"wifi_utils_ios IsConnected oc isSystemWifiConnected create SCNetworkReachabilityRef fail");
++        return NO;
++    }
++
++    // 获取状态
++    NetworkStatus netState = [self currentReachabilityStatus:reachability];
++
++    BOOL isSystemWifiConnect = NO;
++    if (netState == ReachableViaWiFi) {
++        isSystemWifiConnect = YES;
++    } else {
++        isSystemWifiConnect = NO;
++    }
++    return isSystemWifiConnect;
++}
++
++- (NetworkStatus)currentReachabilityStatus:(SCNetworkReachabilityRef)_reachabilityRef {
++    NSAssert(_reachabilityRef != NULL, @"currentNetworkStatus called with NULL SCNetworkReachabilityRef");
++    NetworkStatus returnValue = NotReachable;
++    SCNetworkReachabilityFlags flags;
++    if (SCNetworkReachabilityGetFlags(_reachabilityRef, &flags))
++    {
++        returnValue = [self networkStatusForFlags:flags];
++    }
++    return returnValue;
++}
++
++- (NetworkStatus)networkStatusForFlags:(SCNetworkReachabilityFlags)flags {
++    if ((flags & kSCNetworkReachabilityFlagsReachable) == 0) {
++        // The target host is not reachable.
++        return NotReachable;
++    }
++    NetworkStatus returnValue = NotReachable;
++    if ((flags & kSCNetworkReachabilityFlagsConnectionRequired) == 0) {
++        // If the target host is reachable and no connection is required then we'll assume (for now) that you're on Wi-Fi...
++        returnValue = ReachableViaWiFi;
++    }
++    if ((((flags & kSCNetworkReachabilityFlagsConnectionOnDemand ) != 0) ||
++        (flags & kSCNetworkReachabilityFlagsConnectionOnTraffic) != 0)) {
++        // ... and the connection is on-demand (or on-traffic) if the calling application is using the CFSocketStream or higher APIs...
++        if ((flags & kSCNetworkReachabilityFlagsInterventionRequired) == 0) {
++            // ... and no [user] intervention is needed...
++            returnValue = ReachableViaWiFi;
++        }
++    }
++    if ((flags & kSCNetworkReachabilityFlagsIsWWAN) == kSCNetworkReachabilityFlagsIsWWAN) {
++        // ... but WWAN connections are OK if the calling application is using the CFNetwork APIs.
++        returnValue = ReachableViaWWAN;
++    }
++    return returnValue;
++}
++
++- (void)listenWifiActive {
++    if (self.stateTimer) {
++        [self.stateTimer invalidate];
++        self.stateTimer = nil;
++    }
++    self.stateTimer = [NSTimer scheduledTimerWithTimeInterval:1 repeats:YES block:^(NSTimer * _Nonnull timer) {
++        BOOL isget = [self isSystemWifiActive];
++        if (self.isWifiActivityFirst) {
++            self.isWifiActivityFirst = NO;
++            self.isWifiActivity = isget;
++            int activityInt = 0;
++            if (isget) {
++                activityInt = 1;
++            } else {
++                activityInt = 0;
++            }
++            NSLog(@"wifi_utils_ios on oc wifiStateChange First with activity %d",activityInt);
++            OHOS::Plugin::WifiCallback::GetInstance().SendCallback("wifiStateChange", activityInt );
++        }
++        if ((isget && self.isWifiActivity) || (!isget && !self.isWifiActivity)) {
++            // 未变化
++        } else {
++            // 有变化
++            self.isWifiActivity = isget;
++            int activityInt = 0;
++            if (isget) {
++                activityInt = 1;
++            } else {
++                activityInt = 0;
++            }
++            NSLog(@"wifi_utils_ios on oc wifiStateChange with activity %d",activityInt);
++            OHOS::Plugin::WifiCallback::GetInstance().SendCallback("wifiStateChange", activityInt );
++        }
++    }];
++}
++
++- (void)unListenWifiActive {
++    if (self.stateTimer) {
++        [self.stateTimer invalidate];
++        self.stateTimer = nil;
++        NSLog(@"wifi_utils_ios off oc wifiStateChange success");
++    }
++}
++
++- (void)listenWifiConnect {
++    // 设置网络检测的站点
++    NSString *remoteHostName = @"www.apple.com";
++    reachabilityOnConnect = SCNetworkReachabilityCreateWithName(NULL, [remoteHostName UTF8String]);
++    if (reachabilityOnConnect == NULL) {
++        NSLog(@"wifi_utils_ios on oc wifiConnectionChange create SCNetworkReachabilityRef fail");
++        return;
++    }
++    SCNetworkReachabilityContext context = {0, (__bridge void *)(self), NULL, NULL, NULL};
++    if (SCNetworkReachabilitySetCallback(reachabilityOnConnect, ReachabilityCallback, &context)) {
++        if (SCNetworkReachabilityScheduleWithRunLoop(reachabilityOnConnect, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode)) {
++            NSLog(@"wifi_utils_ios on oc wifiConnectionChange listen success");
++        }
++    }
++}
++
++- (void)unListenWifiConnect {
++    if (reachabilityOnConnect != NULL) {
++        SCNetworkReachabilityUnscheduleFromRunLoop(reachabilityOnConnect, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
++        reachabilityOnConnect = NULL;
++        NSLog(@"wifi_utils_ios off oc wifiConnectionChange success");
++    }
++}
++
++static void ReachabilityCallback(SCNetworkReachabilityRef target, SCNetworkReachabilityFlags flags, void* info) {
++    NSCAssert(info != NULL, @"info was NULL in ReachabilityCallback");
++    NSCAssert([(__bridge NSObject*) info isKindOfClass: [wifi_utils_ios class]], @"info was wrong class in ReachabilityCallback");
++    wifi_utils_ios* noteObject = (__bridge wifi_utils_ios *)info;
++    NetworkStatus netStatus = [noteObject currentReachabilityStatus:target];
++    int connectedInt = 0;
++    if (netStatus == ReachableViaWiFi) {
++       //成功运行
++        connectedInt = 1;
++    } else {
++        connectedInt = 0;
++    }
++    NSLog(@"wifi_utils_ios on oc wifiConnectionChange with connected %d",connectedInt);
++    OHOS::Plugin::WifiCallback::GetInstance().SendCallback("wifiConnectionChange", connectedInt);
++}
++
++// 获取周围扫描wifi列表
++- (void)getWifiList {
++    dispatch_semaphore_t getLinkSemaphore = dispatch_semaphore_create(1);
++    dispatch_semaphore_wait(getLinkSemaphore, DISPATCH_TIME_FOREVER);
++    dispatch_queue_t queue = dispatch_queue_create("com.huawei.hotspotHelper", 0);
++    [NEHotspotHelper registerWithOptions:nil queue:queue handler:^(NEHotspotHelperCommand * _Nonnull cmd) {
++        if (cmd.commandType == kNEHotspotHelperCommandTypeFilterScanList) {
++            for (NEHotspotNetwork *network in cmd.networkList) {
++                NSLog(@"ssid = %@",network.SSID);
++                
++            }
++        }
++        dispatch_semaphore_signal(getLinkSemaphore);
++    }];
++}
++
++@end
+diff --git a/wifi_manager/wifi_callback.cpp b/wifi_manager/wifi_callback.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..b1104c624d6573f4948d9dca6901b852376857d8
+--- /dev/null
++++ b/wifi_manager/wifi_callback.cpp
+@@ -0,0 +1,205 @@
++/*
++ * Copyright (C) 2024 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include "wifi_callback.h"
++
++#include <uv.h>
++
++#include "log.h"
++
++namespace OHOS {
++namespace Plugin {
++constexpr uint32_t INVALID_REF_COUNT = 0xff;
++const std::string WIFI_STATE_CHANGE = "wifiStateChange";
++const std::string WIFI_CONNECTION_CHANGE = "wifiConnectionChange";
++void UvQueueWorkOnReceive(uv_work_t* work, int status)
++{
++    if (work == nullptr || work->data == nullptr) {
++        return;
++    }
++    WifiCallbackWorker* wifiCallbackWorker = reinterpret_cast<WifiCallbackWorker*>(work->data);
++    napi_handle_scope scope;
++    napi_open_handle_scope(wifiCallbackWorker->env, &scope);
++    napi_value undefined = nullptr;
++    napi_get_undefined(wifiCallbackWorker->env, &undefined);
++    napi_value callback = nullptr;
++    napi_value resultout = nullptr;
++    napi_get_reference_value(wifiCallbackWorker->env, wifiCallbackWorker->ref, &callback);
++    napi_value results[1] = { nullptr };
++    results[0] = PluginUtilsNApi::GetNapiInt32(wifiCallbackWorker->code, wifiCallbackWorker->env);
++    napi_call_function(wifiCallbackWorker->env, undefined, callback, 1, &results[0], &resultout);
++    napi_close_handle_scope(wifiCallbackWorker->env, scope);
++    delete wifiCallbackWorker;
++    wifiCallbackWorker = nullptr;
++    delete work;
++}
++
++WifiCallback::WifiCallback()
++{
++    maps_.clear();
++    std::vector<RegObj> wifiStateChangeVector = {};
++    std::vector<RegObj> wifiConnectionChangeVector = {};
++    maps_[WIFI_STATE_CHANGE] = wifiStateChangeVector;
++    maps_[WIFI_CONNECTION_CHANGE] = wifiConnectionChangeVector;
++}
++
++void WifiCallback::SendCallback(const std::string& key, int code)
++{
++    auto it = maps_.find(key);
++    if (it == maps_.end()) {
++        LOGE("send callback event is %{public}s, not in map", key.c_str());
++        return;
++    }
++    auto vectorItem = it->second.begin();
++    while (vectorItem != it->second.end()) {
++        uv_loop_s* loop = nullptr;
++        napi_get_uv_event_loop(vectorItem->m_regEnv, &loop);
++        if (loop == nullptr) {
++            LOGE("Loop instance is nullptr.");
++            return;
++        }
++        uv_work_t* work = new (std::nothrow) uv_work_t;
++        if (work == nullptr) {
++            LOGE("Work is null.");
++            return;
++        }
++        WifiCallbackWorker* wifiCallbackWorker = new (std::nothrow) WifiCallbackWorker();
++        if (wifiCallbackWorker == nullptr) {
++            LOGE("Common event data worker is null.");
++            delete work;
++            work = nullptr;
++            return;
++        }
++        wifiCallbackWorker->code = code;
++        wifiCallbackWorker->env = vectorItem->m_regEnv;
++        wifiCallbackWorker->ref = vectorItem->m_regHanderRef;
++        work->data = (void*)wifiCallbackWorker;
++        uv_queue_work(
++            loop, work, [](uv_work_t* work) {}, UvQueueWorkOnReceive);
++        vectorItem++;
++    }
++}
++
++void WifiCallback::RegisterCallback(const napi_env& env, napi_value callback, const std::string& name)
++{
++    napi_ref handlerRef = nullptr;
++    napi_create_reference(env, callback, 1, &handlerRef);
++    RegObj regObj(env, handlerRef);
++    auto iter = maps_.find(name);
++    if (iter == maps_.end()) {
++        LOGE("Cannot find key %{public}s", name.c_str());
++        return;
++    }
++    if (!HashExitCallback(env, callback, iter->second)) {
++        std::lock_guard<std::mutex> lock(mutex_);
++        iter->second.emplace_back(regObj);
++    }
++}
++
++void WifiCallback::UnRegisterCallback(const napi_env& env, napi_value callback, const std::string& name)
++{
++    auto iter = maps_.find(name);
++    if (iter == maps_.end()) {
++        return;
++    }
++    if (callback != nullptr) {
++        std::lock_guard<std::mutex> lock(mutex_);
++        DeleteRegisterObj(env, iter->second, callback);
++    } else {
++        std::lock_guard<std::mutex> lock(mutex_);
++        LOGW("Unregister all relevant subscribe for: %{public}s", name.c_str());
++        DeleteAllRegisterObj(env, iter->second);
++    }
++}
++
++void WifiCallback::DeleteRegisterObj(const napi_env& env, std::vector<RegObj>& vecRegObjs, napi_value& handler)
++{
++    auto iter = vecRegObjs.begin();
++    for (; iter != vecRegObjs.end();) {
++        if (env == iter->m_regEnv) {
++            napi_value handlerTemp = nullptr;
++            napi_get_reference_value(iter->m_regEnv, iter->m_regHanderRef, &handlerTemp);
++            bool isEqual = false;
++            napi_strict_equals(iter->m_regEnv, handlerTemp, handler, &isEqual);
++            if (isEqual) {
++                uint32_t refCount = INVALID_REF_COUNT;
++                napi_reference_unref(iter->m_regEnv, iter->m_regHanderRef, &refCount);
++                LOGI("delete ref, m_regEnv: %{private}p, m_regHanderRef: %{private}p, refCount: %{public}d",
++                    iter->m_regEnv, iter->m_regHanderRef, refCount);
++                if (refCount == 0) {
++                    napi_delete_reference(iter->m_regEnv, iter->m_regHanderRef);
++                }
++                LOGI("Delete register object ref.");
++                iter = vecRegObjs.erase(iter);
++            } else {
++                ++iter;
++            }
++        } else {
++            LOGI("Unregister event, env is not equal %{private}p, : %{private}p", env, iter->m_regEnv);
++            ++iter;
++        }
++    }
++}
++
++void WifiCallback::DeleteAllRegisterObj(const napi_env& env, std::vector<RegObj>& vecRegObjs)
++{
++    auto iter = vecRegObjs.begin();
++    for (; iter != vecRegObjs.end();) {
++        if (env == iter->m_regEnv) {
++            uint32_t refCount = INVALID_REF_COUNT;
++            napi_reference_unref(iter->m_regEnv, iter->m_regHanderRef, &refCount);
++            LOGI("delete all ref, m_regEnv: %{private}p, m_regHanderRef: %{private}p, refCount: %{public}d",
++                iter->m_regEnv, iter->m_regHanderRef, refCount);
++            if (refCount == 0) {
++                napi_delete_reference(iter->m_regEnv, iter->m_regHanderRef);
++            }
++            iter = vecRegObjs.erase(iter);
++        } else {
++            LOGI("Unregister all event, env is not equal %{private}p, : %{private}p", env, iter->m_regEnv);
++            ++iter;
++        }
++    }
++}
++
++bool WifiCallback::HashExitCallback(const napi_env& env, napi_value callback, const std::vector<RegObj>& regObjs)
++{
++    auto iter = regObjs.begin();
++    while (iter != regObjs.end()) {
++        if (iter->m_regEnv != env) {
++            iter++;
++            break;
++        }
++        napi_value handlerTemp = nullptr;
++        napi_get_reference_value(env, iter->m_regHanderRef, &handlerTemp);
++        bool isEqual = false;
++        napi_strict_equals(env, handlerTemp, callback, &isEqual);
++        if (isEqual) {
++            return isEqual;
++        }
++        iter++;
++    }
++    return false;
++}
++
++bool WifiCallback::IsWifiRegister(const std::string& name)
++{
++    auto iter = maps_.find(name);
++    if (iter == maps_.end()) {
++        return false;
++    }
++    return iter->second.size() == 0 ? false : true;
++}
++} // namespace Plugin
++} // namespace OHOS
+\ No newline at end of file
+diff --git a/wifi_manager/wifi_callback.h b/wifi_manager/wifi_callback.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..2cab205a0c35aa4bf9b5a6882727badfade7e458
+--- /dev/null
++++ b/wifi_manager/wifi_callback.h
+@@ -0,0 +1,59 @@
++/*
++ * Copyright (c) 2023 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#ifndef PLUGINS_WIFI_MANAGER_WIFI_CALLBACK_H
++#define PLUGINS_WIFI_MANAGER_WIFI_CALLBACK_H
++
++#include <map>
++#include <memory>
++#include <mutex>
++#include <vector>
++#include <string>
++
++#include "inner_api/plugin_utils_napi.h"
++#include "wifi_msg.h"
++#include "wifi_napi_utils.h"
++
++namespace OHOS {
++namespace Plugin {
++class WifiCallback {
++public:
++    WifiCallback(const WifiCallback& commonEvent) = delete;
++    WifiCallback& operator=(const WifiCallback& commonEvent) = delete;
++    ~WifiCallback() = default;
++    static WifiCallback& GetInstance()
++    {
++        static WifiCallback instance;
++        return instance;
++    }
++    void SendCallback(const std::string& key, int code);
++    void RegisterCallback(const napi_env &env, napi_value callback, const std::string& name);
++    void UnRegisterCallback(const napi_env &env, napi_value callback, const std::string& name);
++    bool IsWifiRegister(const std::string& name);
++
++private:
++    WifiCallback();
++    bool HashExitCallback(const napi_env& env, napi_value callback, const std::vector<RegObj>& regObjs);
++    void DeleteRegisterObj(const napi_env& env, std::vector<RegObj>& vecRegObjs, napi_value& handler);
++    void DeleteAllRegisterObj(const napi_env& env, std::vector<RegObj>& vecRegObjs);
++
++private:
++    std::map<std::string, std::vector<RegObj>> maps_;
++    std::mutex mutex_;
++};
++} // namespace Plugin
++} // namespace OHOS
++
++#endif
+\ No newline at end of file
+diff --git a/wifi_manager/wifi_device.h b/wifi_manager/wifi_device.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..e5864d6c7c04a7105babd42922593790ae6dc6c7
+--- /dev/null
++++ b/wifi_manager/wifi_device.h
+@@ -0,0 +1,40 @@
++/*
++ * Copyright (C) 2024 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#ifndef OHOS_WIFI_DEVICE_H
++#define OHOS_WIFI_DEVICE_H
++
++#include <memory>
++#include <string>
++
++#include "inner_api/plugin_utils_napi.h"
++#include "wifi_errcode.h"
++#include "wifi_msg.h"
++#include "wifi_napi_utils.h"
++
++namespace OHOS {
++namespace Plugin {
++class WifiDevice {
++public:
++    static std::shared_ptr<WifiDevice> GetInstance(int systemAbilityId, int instId = 0);
++    virtual ErrCode GetLinkedInfo(WifiLinkedInfo& info) = 0;
++    virtual ErrCode IsWifiActive(bool& bActive) = 0;
++    virtual ErrCode IsConnected(bool& isConnected) = 0;
++    virtual ErrCode On(const std::string& key) = 0;
++    virtual ErrCode Off(const std::string& key) = 0;
++};
++} // namespace Plugin
++} // namespace OHOS
++#endif // OHOS_WIFI_DEVICE_H
+diff --git a/wifi_manager/wifi_errcode.h b/wifi_manager/wifi_errcode.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..dfb9e6a891825e4a4296868bc273465a3e288fcf
+--- /dev/null
++++ b/wifi_manager/wifi_errcode.h
+@@ -0,0 +1,49 @@
++/*
++ * Copyright (C) 2021 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#ifndef OHOS_WIFI_ERRCODE_H
++#define OHOS_WIFI_ERRCODE_H
++
++namespace OHOS {
++namespace Plugin {
++/* Wifi errcode defines */
++enum ErrCode {
++    WIFI_OPT_SUCCESS = 0,             /* successfully */
++    WIFI_OPT_FAILED,                  /* failed */
++    WIFI_OPT_NOT_SUPPORTED,           /* not supported */
++    WIFI_OPT_INVALID_PARAM,           /* invalid params */
++    WIFI_OPT_FORBID_AIRPLANE,         /* forbid when current airplane opened */
++    WIFI_OPT_FORBID_POWSAVING,        /* forbid when current powersaving opened */
++    WIFI_OPT_PERMISSION_DENIED,       /* permission denied */
++    WIFI_OPT_OPEN_FAIL_WHEN_CLOSING,  /* open failed when current is closing */
++    WIFI_OPT_OPEN_SUCC_WHEN_OPENED,   /* open success when current has been opened */
++    WIFI_OPT_CLOSE_FAIL_WHEN_OPENING, /* close failed when current is opening */
++    WIFI_OPT_CLOSE_SUCC_WHEN_CLOSED,  /* close success when current has been closed */
++    WIFI_OPT_STA_NOT_OPENED,          /* sta service not opened */
++    WIFI_OPT_SCAN_NOT_OPENED,         /* scan service not opened */
++    WIFI_OPT_AP_NOT_OPENED,           /* ap service not opened */
++    WIFI_OPT_INVALID_CONFIG,          /* invalid config */
++    WIFI_OPT_P2P_NOT_OPENED,          /* p2p service not opened */
++    WIFI_OPT_P2P_MAC_NOT_FOUND,
++    WIFI_OPT_P2P_ERR_MAC_FORMAT,
++    WIFI_OPT_P2P_ERR_INTENT,
++    WIFI_OPT_P2P_ERR_SIZE_NW_NAME,
++    WIFI_OPT_MOVING_FREEZE_CTRL,      /* moving freeze scanning control */
++    WIFI_OPT_NON_SYSTEMAPP,           /* not system app denied */
++    WIFI_OPT_ENTERPRISE_DENIED = 203, /* mdm forbidden */
++};
++} // namespace Plugin
++} // namespace OHOS
++#endif // OHOS_WIFI_ERRCODE_H
+diff --git a/wifi_manager/wifi_error_code.h b/wifi_manager/wifi_error_code.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..d3d11ad990b2e20b831bf194f98a4de953bd60a8
+--- /dev/null
++++ b/wifi_manager/wifi_error_code.h
+@@ -0,0 +1,70 @@
++/*
++ * Copyright (c) 2020 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++/**
++ * @addtogroup wifiservice
++ * @{
++ *
++ * @brief Provides functions for the Wi-Fi station and hotspot modes.
++ *
++ * You can use this module to enable and disable the Wi-Fi station or hotspot mode, connect to and disconnect from a
++ * station or hotspot, query the station or hotspot status, and listen for events. \n
++ *
++ * @since 7
++ */
++
++/**
++ * @file wifi_error_code.h
++ *
++ * @brief Defines error codes of the Wi-Fi service.
++ *
++ * @since 7
++ */
++
++#ifndef WIFI_ERROR_CODE_C_H
++#define WIFI_ERROR_CODE_C_H
++
++/**
++ * @brief Enumerates Wi-Fi error codes.
++ *
++ * @since 7
++ */
++typedef enum {
++    /** No errors. */
++    WIFI_SUCCESS = 0,
++    /** Invalid parameters */
++    ERROR_WIFI_INVALID_ARGS = -1,
++    /** Invalid chip */
++    ERROR_WIFI_CHIP_INVALID = -2,
++    /** Invalid Wi-Fi interface */
++    ERROR_WIFI_IFACE_INVALID = -3,
++    /** Invalid RTT controller */
++    ERROR_WIFI_RTT_CONTROLLER_INVALID = -4,
++    /** Wi-Fi not supported by the current version or device */
++    ERROR_WIFI_NOT_SUPPORTED = -5,
++    /** Wi-Fi unavailable */
++    ERROR_WIFI_NOT_AVAILABLE = -6,
++    /** Wi-Fi not initialized or started */
++    ERROR_WIFI_NOT_STARTED = -7,
++    /** System busy */
++    ERROR_WIFI_BUSY = -8,
++    /** Wi-Fi invalid password */
++    ERROR_WIFI_INVALID_PASSWORD = -9,
++    /** Unknown error */
++    ERROR_WIFI_UNKNOWN = -128
++} WifiErrorCode;
++
++#endif // WIFI_ERROR_CODE_C_H
++       /** @} */
+\ No newline at end of file
+diff --git a/wifi_manager/wifi_msg.h b/wifi_manager/wifi_msg.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..43853c9973b55518051ed0d3cbf15b4101b53543
+--- /dev/null
++++ b/wifi_manager/wifi_msg.h
+@@ -0,0 +1,168 @@
++/*
++ * Copyright (C) 2021-2022 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++#ifndef OHOS_WIFI_MSG_H
++#define OHOS_WIFI_MSG_H
++
++#include <algorithm>
++#include <cstring>
++#include <ctime>
++#include <iomanip>
++#include <map>
++#include <sstream>
++#include <string>
++#include <vector>
++
++namespace OHOS {
++namespace Plugin {
++#define INVALID_NETWORK_ID (-1)
++
++enum class SupplicantState {
++    DISCONNECTED = 0,
++    INTERFACE_DISABLED = 1,
++    INACTIVE = 2,
++    SCANNING = 3,
++    AUTHENTICATING = 4,
++    ASSOCIATING = 5,
++    ASSOCIATED = 6,
++    FOUR_WAY_HANDSHAKE = 7,
++    GROUP_HANDSHAKE = 8,
++    COMPLETED = 9,
++    UNKNOWN = 10,
++
++    INVALID = 0xFF,
++};
++
++enum class WifiChannelWidth {
++    WIDTH_20MHZ = 0,
++    WIDTH_40MHZ = 1,
++    WIDTH_80MHZ = 2,
++    WIDTH_160MHZ = 3,
++    WIDTH_80MHZ_PLUS = 4,
++    WIDTH_INVALID
++};
++
++enum class DetailedState {
++    AUTHENTICATING = 0,
++    BLOCKED = 1,
++    CAPTIVE_PORTAL_CHECK = 2,
++    CONNECTED = 3,
++    CONNECTING = 4,
++    DISCONNECTED = 5,
++    DISCONNECTING = 6,
++    FAILED = 7,
++    IDLE = 8,
++    OBTAINING_IPADDR = 9,
++    WORKING = 10,
++    NOTWORKING = 11,
++    SCANNING = 12,
++    SUSPENDED = 13,
++    VERIFYING_POOR_LINK = 14,
++    PASSWORD_ERROR = 15,
++    CONNECTION_REJECT = 16,
++    CONNECTION_FULL = 17,
++    CONNECTION_TIMEOUT = 18,
++    OBTAINING_IPADDR_FAIL = 19,
++    INVALID = 0xFF,
++};
++
++enum ConnState {
++    /** The device is searching for an available AP. */
++    SCANNING,
++
++    /** The Wi-Fi connection is being set up. */
++    CONNECTING,
++
++    /** The Wi-Fi connection is being authenticated. */
++    AUTHENTICATING,
++
++    /** The IP address of the Wi-Fi connection is being obtained. */
++    OBTAINING_IPADDR,
++
++    /** The Wi-Fi connection has been set up. */
++    CONNECTED,
++
++    /** The Wi-Fi connection is being torn down. */
++    DISCONNECTING,
++
++    /** The Wi-Fi connection has been torn down. */
++    DISCONNECTED,
++
++    /** Failed to set up the Wi-Fi connection. */
++    UNKNOWN
++};
++
++struct WifiLinkedInfo {
++    int networkId;
++    std::string ssid;
++    std::string bssid;
++    int rssi; /* signal level */
++    int band; /* 2.4G / 5G */
++    int frequency;
++    int linkSpeed; /* units: Mbps */
++    std::string macAddress;
++    int macType;
++    unsigned int ipAddress;
++    ConnState connState;
++    bool ifHiddenSSID;
++    int rxLinkSpeed; /* Downstream network speed */
++    int txLinkSpeed; /* Upstream network speed */
++    int chload;
++    int snr; /* Signal-to-Noise Ratio */
++    int isDataRestricted;
++    std::string platformType;
++    std::string portalUrl;
++    SupplicantState supplicantState; /* wpa_supplicant state */
++    DetailedState detailedState;     /* connection state */
++    int wifiStandard;                /* wifi standard */
++    int maxSupportedRxLinkSpeed;
++    int maxSupportedTxLinkSpeed;
++    WifiChannelWidth channelWidth; /* curr ap channel width */
++    int lastPacketDirection;
++    int lastRxPackets;
++    int lastTxPackets;
++    int retryedConnCount;
++    bool isAncoConnected;
++    WifiLinkedInfo()
++    {
++        networkId = INVALID_NETWORK_ID;
++        rssi = 0;
++        band = 0;
++        frequency = 0;
++        linkSpeed = 0;
++        macType = 0;
++        ipAddress = 0;
++        connState = ConnState::UNKNOWN;
++        ifHiddenSSID = false;
++        rxLinkSpeed = 0;
++        txLinkSpeed = 0;
++        chload = 0;
++        snr = 0;
++        isDataRestricted = 0;
++        supplicantState = SupplicantState::INVALID;
++        detailedState = DetailedState::INVALID;
++        wifiStandard = 0;
++        maxSupportedRxLinkSpeed = 0;
++        maxSupportedTxLinkSpeed = 0;
++        channelWidth = WifiChannelWidth::WIDTH_INVALID;
++        lastPacketDirection = 0;
++        lastRxPackets = 0;
++        lastTxPackets = 0;
++        retryedConnCount = 0;
++        isAncoConnected = false;
++    }
++};
++} // namespace Plugin
++} // namespace OHOS
++#endif
+diff --git a/wifi_manager/wifi_napi_device.cpp b/wifi_manager/wifi_napi_device.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..7ea2599cf0a3e5e5c24a10c1c3ea867ac3854b8f
+--- /dev/null
++++ b/wifi_manager/wifi_napi_device.cpp
+@@ -0,0 +1,247 @@
++/*
++ * Copyright (c) 2024 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include "wifi_napi_device.h"
++
++#include <new>
++
++#include "inner_api/plugin_utils_napi.h"
++#include "log.h"
++#include "wifi_callback.h"
++#include "wifi_device.h"
++#include "wifi_napi_errcode.h"
++
++namespace OHOS {
++namespace Plugin {
++std::shared_ptr<WifiDevice> wifiDevicePtr = WifiDevice::GetInstance(0);
++
++static std::set<std::string> g_supportEventList = {
++    EVENT_STA_POWER_STATE_CHANGE,
++    EVENT_STA_CONN_STATE_CHANGE,
++};
++
++std::map<std::string, std::int32_t> g_EventSysCapMap = {
++    { EVENT_STA_POWER_STATE_CHANGE, SYSCAP_WIFI_STA },
++    { EVENT_STA_CONN_STATE_CHANGE, SYSCAP_WIFI_STA },
++};
++
++static void LinkedInfoToJs(const napi_env& env, WifiLinkedInfo& linkedInfo, napi_value& result)
++{
++    SetValueUtf8String(env, "ssid", linkedInfo.ssid.c_str(), result);
++    SetValueUtf8String(env, "bssid", linkedInfo.bssid.c_str(), result);
++    SetValueInt32(env, "networkId", linkedInfo.networkId, result);
++    SetValueInt32(env, "rssi", linkedInfo.rssi, result);
++    SetValueInt32(env, "band", linkedInfo.band, result);
++    SetValueInt32(env, "linkSpeed", linkedInfo.linkSpeed, result);
++    SetValueInt32(env, "frequency", linkedInfo.frequency, result);
++    SetValueBool(env, "isHidden", linkedInfo.ifHiddenSSID, result);
++    SetValueBool(env, "isRestricted", linkedInfo.isDataRestricted, result);
++    SetValueInt32(env, "chload", linkedInfo.chload, result);
++    SetValueInt32(env, "snr", linkedInfo.snr, result);
++    SetValueUtf8String(env, "macAddress", linkedInfo.macAddress.c_str(), result);
++    SetValueInt32(env, "macType", linkedInfo.macType, result);
++    SetValueUnsignedInt32(env, "ipAddress", linkedInfo.ipAddress, result);
++    SetValueInt32(env, "suppState", static_cast<int>(linkedInfo.supplicantState), result);
++    SetValueInt32(env, "connState", static_cast<int>(linkedInfo.connState), result);
++    SetValueInt32(env, "WifiStandard", static_cast<int>(linkedInfo.wifiStandard), result);
++    SetValueInt32(env, "maxSupportedRxLinkSpeed", static_cast<int>(linkedInfo.maxSupportedRxLinkSpeed), result);
++    SetValueInt32(env, "maxSupportedTxLinkSpeed", static_cast<int>(linkedInfo.maxSupportedTxLinkSpeed), result);
++    SetValueInt32(env, "rxLinkSpeed", static_cast<int>(linkedInfo.rxLinkSpeed), result);
++    SetValueInt32(env, "txLinkSpeed", static_cast<int>(linkedInfo.txLinkSpeed), result);
++    SetValueInt32(env, "channelWidth", static_cast<int>(linkedInfo.channelWidth), result);
++}
++
++napi_value GetLinkedInfo(napi_env env, napi_callback_info info)
++{
++    TRACE_FUNC_CALL;
++    size_t argc = 2;
++    napi_value argv[argc];
++    napi_value thisVar = nullptr;
++    void* data = nullptr;
++    NAPI_CALL(env, napi_get_cb_info(env, info, &argc, argv, &thisVar, &data));
++    WIFI_NAPI_ASSERT(env, wifiDevicePtr != nullptr, WIFI_OPT_FAILED, SYSCAP_WIFI_STA);
++
++    LinkedInfoAsyncContext* asyncContext = new LinkedInfoAsyncContext(env);
++    WIFI_NAPI_ASSERT(env, asyncContext != nullptr, WIFI_OPT_FAILED, SYSCAP_WIFI_STA);
++    napi_create_string_latin1(env, "getLinkedInfo", NAPI_AUTO_LENGTH, &asyncContext->resourceName);
++
++    asyncContext->executeFunc = [&](void* data) -> void {
++        LinkedInfoAsyncContext* context = static_cast<LinkedInfoAsyncContext*>(data);
++        TRACE_FUNC_CALL_NAME("wifiDevicePtr->GetLinkedInfo");
++        context->errorCode = WifiDevice::GetInstance(0)->GetLinkedInfo(context->linkedInfo);
++    };
++
++    asyncContext->completeFunc = [&](void* data) -> void {
++        LinkedInfoAsyncContext* context = static_cast<LinkedInfoAsyncContext*>(data);
++        napi_create_object(context->env, &context->result);
++        LinkedInfoToJs(context->env, context->linkedInfo, context->result);
++        LOGI("Push get linkedInfo result to client");
++    };
++
++    size_t nonCallbackArgNum = 0;
++    asyncContext->sysCap = SYSCAP_WIFI_STA;
++    return DoAsyncWork(env, asyncContext, argc, argv, nonCallbackArgNum);
++}
++
++napi_value IsWifiActive(napi_env env, napi_callback_info info)
++{
++    TRACE_FUNC_CALL;
++    WIFI_NAPI_ASSERT(env, wifiDevicePtr != nullptr, WIFI_OPT_FAILED, SYSCAP_WIFI_STA);
++    bool activeStatus = false;
++    ErrCode ret = WifiDevice::GetInstance(0)->IsWifiActive(activeStatus);
++    if (ret != WIFI_OPT_SUCCESS) {
++        LOGE("Get wifi active status fail: %{public}d", ret);
++        WIFI_NAPI_ASSERT(env, ret == WIFI_OPT_SUCCESS, ret, SYSCAP_WIFI_STA);
++    }
++    napi_value result;
++    napi_get_boolean(env, activeStatus, &result);
++    return result;
++}
++
++napi_value IsConnected(napi_env env, napi_callback_info info)
++{
++    TRACE_FUNC_CALL;
++    WIFI_NAPI_ASSERT(env, wifiDevicePtr != nullptr, WIFI_OPT_FAILED, SYSCAP_WIFI_STA);
++    bool isConnected = false;
++    ErrCode ret = wifiDevicePtr->IsConnected(isConnected);
++    if (ret != WIFI_OPT_SUCCESS) {
++        LOGE("IsConnected return error: %{public}d", ret);
++        WIFI_NAPI_ASSERT(env, ret == WIFI_OPT_SUCCESS, ret, SYSCAP_WIFI_STA);
++    }
++    napi_value result;
++    napi_get_boolean(env, isConnected, &result);
++    return result;
++}
++
++napi_value On(napi_env env, napi_callback_info cbinfo)
++{
++    TRACE_FUNC_CALL;
++    size_t requireArgc = 2;
++    size_t argc = 2;
++    napi_value argv[2] = { 0 };
++    napi_value thisVar = 0;
++    napi_valuetype valuetype;
++    NAPI_CALL(env, napi_get_cb_info(env, cbinfo, &argc, argv, &thisVar, nullptr));
++
++    if (argc >= 2) {
++        NAPI_CALL(env, napi_typeof(env, argv[1], &valuetype));
++        if (valuetype != napi_function) {
++            LOGI("callback Wrong argument type. Function expected.");
++            return nullptr;
++        }
++    }
++
++    if (requireArgc > argc) {
++        LOGI("requireArgc:%{public}zu, argc:%{public}zu", requireArgc, argc);
++        WIFI_NAPI_RETURN(env, false, WIFI_OPT_INVALID_PARAM, 0);
++    }
++
++    napi_valuetype eventName = napi_undefined;
++    napi_typeof(env, argv[0], &eventName);
++    if (eventName != napi_string) {
++        LOGI("first argv != napi_string");
++        WIFI_NAPI_RETURN(env, false, WIFI_OPT_INVALID_PARAM, 0);
++    }
++
++    napi_valuetype handler = napi_undefined;
++    napi_typeof(env, argv[1], &handler);
++    if (handler != napi_function) {
++        LOGI("second argv != napi_function");
++        WIFI_NAPI_RETURN(env, false, WIFI_OPT_INVALID_PARAM, 0);
++    }
++    std::string type = PluginUtilsNApi::GetStringFromValueUtf8(env, argv[0]);
++
++    if (type != EVENT_STA_POWER_STATE_CHANGE && type != EVENT_STA_CONN_STATE_CHANGE) {
++        LOGI("wifi event type error !");
++        return nullptr;
++    }
++
++    bool isWifiRegister = WifiCallback::GetInstance().IsWifiRegister(type);
++    WifiCallback::GetInstance().RegisterCallback(env, argv[1], type);
++
++    if (!isWifiRegister) {
++        ErrCode ret = wifiDevicePtr->On(type);
++        if (ret != WIFI_OPT_SUCCESS) {
++            LOGE("On return error: %{public}d", ret);
++            WIFI_NAPI_ASSERT(env, ret == WIFI_OPT_SUCCESS, ret, SYSCAP_WIFI_STA);
++            return nullptr;
++        }
++    }
++
++    napi_value result = nullptr;
++    napi_get_undefined(env, &result);
++    return result;
++}
++
++napi_value Off(napi_env env, napi_callback_info cbinfo)
++{
++    TRACE_FUNC_CALL;
++    size_t requireArgc = 1;
++    size_t requireArgcWithCb = 2;
++    size_t argc = 2;
++    napi_value argv[2] = { 0 };
++    napi_value thisVar = 0;
++    napi_valuetype valuetype;
++    NAPI_CALL(env, napi_get_cb_info(env, cbinfo, &argc, argv, &thisVar, nullptr));
++    if (argc >= WIFI_NAPI_MAX_PARA) {
++        NAPI_CALL(env, napi_typeof(env, argv[1], &valuetype));
++        if (valuetype != napi_function) {
++            LOGI("callback Wrong argument type. Function expected.");
++            return nullptr;
++        }
++    }
++    if (requireArgc > argc) {
++        LOGI("requireArgc:%{public}zu, argc:%{public}zu", requireArgc, argc);
++        WIFI_NAPI_RETURN(env, false, WIFI_OPT_INVALID_PARAM, 0);
++    }
++
++    napi_valuetype eventName = napi_undefined;
++    napi_typeof(env, argv[0], &eventName);
++    if (eventName != napi_string) {
++        LOGI("first argv != napi_string");
++        WIFI_NAPI_RETURN(env, false, WIFI_OPT_INVALID_PARAM, 0);
++    }
++
++    napi_valuetype handler = napi_undefined;
++    if (argc >= requireArgcWithCb) {
++        napi_typeof(env, argv[1], &handler);
++        if (handler != napi_function && handler != napi_null) {
++            LOGI("second argv != napi_function");
++            WIFI_NAPI_RETURN(env, false, WIFI_OPT_INVALID_PARAM, 0);
++        }
++    }
++    std::string type = PluginUtilsNApi::GetStringFromValueUtf8(env, argv[0]);
++
++    if (type != EVENT_STA_POWER_STATE_CHANGE && type != EVENT_STA_CONN_STATE_CHANGE) {
++        LOGI("wifi event type error !");
++        return nullptr;
++    }
++    WifiCallback::GetInstance().UnRegisterCallback(env, argv[1], type);
++    bool isWifiRegister = WifiCallback::GetInstance().IsWifiRegister(type);
++
++    if (!isWifiRegister) {
++        ErrCode ret = wifiDevicePtr->Off(type);
++        if (ret != WIFI_OPT_SUCCESS) {
++            LOGE("Off return error: %{public}d", ret);
++            WIFI_NAPI_ASSERT(env, ret == WIFI_OPT_SUCCESS, ret, SYSCAP_WIFI_STA);
++            return nullptr;
++        }
++    }
++    napi_value result = nullptr;
++    napi_get_undefined(env, &result);
++    return result;
++}
++} // namespace Plugin
++} // namespace OHOS
+\ No newline at end of file
+diff --git a/wifi_manager/wifi_napi_device.h b/wifi_manager/wifi_napi_device.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..8b7412c4e535e4186df3a3657225b04b5afb70eb
+--- /dev/null
++++ b/wifi_manager/wifi_napi_device.h
+@@ -0,0 +1,53 @@
++/*
++ * Copyright (c) 2024 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#ifndef WIFI_NAPI_DEVICE_H_
++#define WIFI_NAPI_DEVICE_H_
++
++#include <iostream>
++#include <map>
++#include <set>
++#include <shared_mutex>
++#include <string>
++
++#include "napi/native_api.h"
++#include "napi/native_node_api.h"
++#include "wifi_errcode.h"
++#include "wifi_msg.h"
++#include "wifi_napi_utils.h"
++
++namespace OHOS {
++namespace Plugin {
++napi_value IsWifiActive(napi_env env, napi_callback_info info);
++napi_value GetLinkedInfo(napi_env env, napi_callback_info info);
++napi_value On(napi_env env, napi_callback_info cbinfo);
++napi_value Off(napi_env env, napi_callback_info cbinfo);
++napi_value IsConnected(napi_env env, napi_callback_info info);
++
++class LinkedInfoAsyncContext : public AsyncContext {
++public:
++    WifiLinkedInfo linkedInfo;
++
++    LinkedInfoAsyncContext(napi_env env, napi_async_work work = nullptr, napi_deferred deferred = nullptr)
++        : AsyncContext(env, work, deferred)
++    {}
++
++    LinkedInfoAsyncContext() = delete;
++
++    virtual ~LinkedInfoAsyncContext() {}
++};
++} // namespace Plugin
++} // namespace OHOS
++#endif // WIFI_NAPI_DEVICE_H_
+\ No newline at end of file
+diff --git a/wifi_manager/wifi_napi_entry.cpp b/wifi_manager/wifi_napi_entry.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..14e76f801cd49755b1b764e17c3e8036da989791
+--- /dev/null
++++ b/wifi_manager/wifi_napi_entry.cpp
+@@ -0,0 +1,63 @@
++/*
++ * Copyright (c) 2024 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include "log.h"
++#include "plugin_utils.h"
++#include "wifi_napi_device.h"
++
++#ifdef ANDROID_PLATFORM
++#include "plugins/wifi_manager/android/java/jni/wifi_device_jni.h"
++#endif
++
++namespace OHOS {
++namespace Plugin {
++#ifdef ANDROID_PLATFORM
++static void WifiManagerPluginJniRegister()
++{
++    const char className[] = "ohos.ace.plugin.wifimanager.WifiDevicePlugin";
++    ARKUI_X_Plugin_RegisterJavaPlugin(&WiFiDeviceJni::Register, className);
++}
++#endif
++static napi_value Init(napi_env env, napi_value exports)
++{
++    napi_property_descriptor desc[] = {
++        DECLARE_NAPI_FUNCTION("isWifiActive", IsWifiActive),
++        DECLARE_NAPI_FUNCTION("getLinkedInfo", GetLinkedInfo),
++        DECLARE_NAPI_FUNCTION("on", On),
++        DECLARE_NAPI_FUNCTION("off", Off),
++        DECLARE_NAPI_FUNCTION("isConnected", IsConnected),
++    };
++
++    NAPI_CALL(env, napi_define_properties(env, exports, sizeof(desc) / sizeof(napi_property_descriptor), desc));
++    return exports;
++}
++
++static napi_module wifiJsModule = { .nm_version = 1,
++    .nm_flags = 0,
++    .nm_filename = NULL,
++    .nm_register_func = Init,
++    .nm_modname = "wifiManager",
++    .nm_priv = ((void*)0),
++    .reserved = { 0 } };
++
++extern "C" __attribute__((constructor)) void RegisterModule(void)
++{
++#ifdef ANDROID_PLATFORM
++    WifiManagerPluginJniRegister();
++#endif
++    napi_module_register(&wifiJsModule);
++}
++} // namespace Plugin
++} // namespace OHOS
+diff --git a/wifi_manager/wifi_napi_errcode.cpp b/wifi_manager/wifi_napi_errcode.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..34ec9788fc9d2b0e2fd231fe0032a02c6c911e1a
+--- /dev/null
++++ b/wifi_manager/wifi_napi_errcode.cpp
+@@ -0,0 +1,195 @@
++/*
++ * Copyright (C) 2022 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include "wifi_napi_errcode.h"
++
++#include <map>
++
++#include "log.h"
++#include "wifi_errcode.h"
++
++namespace OHOS {
++namespace Plugin {
++static std::map<int32_t, int32_t> errCodeMap = {
++    { ErrCode::WIFI_OPT_SUCCESS, WifiNapiErrCode::WIFI_ERRCODE_SUCCESS },
++    { ErrCode::WIFI_OPT_FAILED, WifiNapiErrCode::WIFI_ERRCODE_OPERATION_FAILED },
++    { ErrCode::WIFI_OPT_NOT_SUPPORTED, WifiNapiErrCode::WIFI_ERRCODE_NOT_SUPPORTED },
++    { ErrCode::WIFI_OPT_INVALID_PARAM, WifiNapiErrCode::WIFI_ERRCODE_INVALID_PARAM },
++    { ErrCode::WIFI_OPT_FORBID_AIRPLANE, WifiNapiErrCode::WIFI_ERRCODE_OPERATION_FAILED },
++    { ErrCode::WIFI_OPT_FORBID_POWSAVING, WifiNapiErrCode::WIFI_ERRCODE_OPERATION_FAILED },
++    { ErrCode::WIFI_OPT_PERMISSION_DENIED, WifiNapiErrCode::WIFI_ERRCODE_PERMISSION_DENIED },
++    { ErrCode::WIFI_OPT_NON_SYSTEMAPP, WifiNapiErrCode::WIFI_ERRCODE_NON_SYSTEMAPP },
++    { ErrCode::WIFI_OPT_OPEN_FAIL_WHEN_CLOSING, WifiNapiErrCode::WIFI_ERRCODE_OPEN_FAIL_WHEN_CLOSING },
++    { ErrCode::WIFI_OPT_OPEN_SUCC_WHEN_OPENED, WifiNapiErrCode::WIFI_ERRCODE_CLOSE_FAIL_WHEN_OPENING },
++    { ErrCode::WIFI_OPT_CLOSE_FAIL_WHEN_OPENING, WifiNapiErrCode::WIFI_ERRCODE_CLOSE_FAIL_WHEN_OPENING },
++    { ErrCode::WIFI_OPT_CLOSE_SUCC_WHEN_CLOSED, WifiNapiErrCode::WIFI_ERRCODE_OPERATION_FAILED },
++    { ErrCode::WIFI_OPT_STA_NOT_OPENED, WifiNapiErrCode::WIFI_ERRCODE_WIFI_NOT_OPENED },
++    { ErrCode::WIFI_OPT_SCAN_NOT_OPENED, WifiNapiErrCode::WIFI_ERRCODE_OPERATION_FAILED },
++    { ErrCode::WIFI_OPT_AP_NOT_OPENED, WifiNapiErrCode::WIFI_ERRCODE_OPERATION_FAILED },
++    { ErrCode::WIFI_OPT_INVALID_CONFIG, WifiNapiErrCode::WIFI_ERRCODE_OPERATION_FAILED },
++    { ErrCode::WIFI_OPT_P2P_NOT_OPENED, WifiNapiErrCode::WIFI_ERRCODE_WIFI_NOT_OPENED },
++    { ErrCode::WIFI_OPT_P2P_MAC_NOT_FOUND, WifiNapiErrCode::WIFI_ERRCODE_OPERATION_FAILED },
++    { ErrCode::WIFI_OPT_P2P_ERR_MAC_FORMAT, WifiNapiErrCode::WIFI_ERRCODE_OPERATION_FAILED },
++    { ErrCode::WIFI_OPT_P2P_ERR_INTENT, WifiNapiErrCode::WIFI_ERRCODE_OPERATION_FAILED },
++    { ErrCode::WIFI_OPT_P2P_ERR_SIZE_NW_NAME, WifiNapiErrCode::WIFI_ERRCODE_OPERATION_FAILED },
++    { ErrCode::WIFI_OPT_MOVING_FREEZE_CTRL, WifiNapiErrCode::WIFI_ERRCODE_OPERATION_FAILED },
++};
++
++static std::map<int32_t, std::string> napiErrMsgMap {
++    { WifiNapiErrCode::WIFI_ERRCODE_OPERATION_FAILED, "Operation failed." },
++    { WifiNapiErrCode::WIFI_ERRCODE_WIFI_NOT_OPENED, "WIFI doesn't open." },
++    { WifiNapiErrCode::WIFI_ERRCODE_PERMISSION_DENIED, "Permission denied." },
++    { WifiNapiErrCode::WIFI_ERRCODE_NON_SYSTEMAPP, "non-system application." },
++    { WifiNapiErrCode::WIFI_ERRCODE_INVALID_PARAM, "Parameter error." },
++    { WifiNapiErrCode::WIFI_ERRCODE_NOT_SUPPORTED, "Capability not supported." },
++    { WifiNapiErrCode::WIFI_ERRCODE_OPEN_FAIL_WHEN_CLOSING, "Failed for wifi is closing." },
++    { WifiNapiErrCode::WIFI_ERRCODE_CLOSE_FAIL_WHEN_OPENING, "Failed for wifi is opening." },
++};
++
++static napi_value NapiGetUndefined(const napi_env& env)
++{
++    napi_value undefined = nullptr;
++    napi_get_undefined(env, &undefined);
++    return undefined;
++}
++
++static int32_t GetNapiErrCode(const napi_env& env, const int32_t errCodeIn, const int32_t sysCap = 0)
++{
++    auto iter = errCodeMap.find(errCodeIn);
++    if (iter == errCodeMap.end()) {
++        return WifiNapiErrCode::WIFI_ERRCODE_OPERATION_FAILED + sysCap;
++    }
++    if (iter->second == WifiNapiErrCode::WIFI_ERRCODE_PERMISSION_DENIED ||
++        iter->second == WifiNapiErrCode::WIFI_ERRCODE_INVALID_PARAM ||
++        iter->second == WifiNapiErrCode::WIFI_ERRCODE_NOT_SUPPORTED ||
++        iter->second == WifiNapiErrCode::WIFI_ERRCODE_NON_SYSTEMAPP) {
++        return iter->second;
++    }
++    return iter->second + sysCap;
++}
++
++static std::string GetNapiErrMsg(const napi_env& env, const int32_t errCode, int sysCap)
++{
++    if (errCode == ErrCode::WIFI_OPT_SUCCESS) {
++        return "";
++    }
++
++    int32_t napiErrCode = GetNapiErrCode(env, errCode);
++    auto iter = napiErrMsgMap.find(napiErrCode);
++    if (iter != napiErrMsgMap.end()) {
++        std::string errMessage = "BussinessError ";
++        napiErrCode = GetNapiErrCode(env, errCode, sysCap);
++        errMessage.append(std::to_string(napiErrCode)).append(": ").append(iter->second);
++        return errMessage;
++    }
++    return "Inner error.";
++}
++
++#ifdef ENABLE_NAPI_WIFI_MANAGER
++static napi_value NapiGetNull(const napi_env& env)
++{
++    napi_value res = nullptr;
++    napi_get_null(env, &res);
++    return res;
++}
++
++static napi_value GetCallbackErrorValue(napi_env env, const int32_t errCode, const std::string errMsg)
++{
++    napi_value businessError = nullptr;
++    napi_value eCode = nullptr;
++    napi_value eMsg = nullptr;
++    NAPI_CALL(env, napi_create_int32(env, errCode, &eCode));
++    NAPI_CALL(env, napi_create_string_utf8(env, errMsg.c_str(), errMsg.length(), &eMsg));
++    NAPI_CALL(env, napi_create_object(env, &businessError));
++    NAPI_CALL(env, napi_set_named_property(env, businessError, "code", eCode));
++    NAPI_CALL(env, napi_set_named_property(env, businessError, "message", eMsg));
++    return businessError;
++}
++#endif
++
++void HandleCallbackErrCode(const napi_env& env, const AsyncContext& info)
++{
++    LOGI("HandleCallbackErrCode, errCode = %{public}d", (int)info.errorCode);
++    constexpr int RESULT_PARAMS_NUM = 2;
++    napi_value undefine = NapiGetUndefined(env);
++    napi_value callback = nullptr;
++    napi_value result[RESULT_PARAMS_NUM] = { nullptr };
++    result[1] = info.result;
++    if (info.errorCode == ErrCode::WIFI_OPT_SUCCESS) {
++#ifdef ENABLE_NAPI_WIFI_MANAGER
++        result[0] = NapiGetUndefined(env);
++#else
++        napi_create_uint32(env, info.errorCode, &result[0]);
++#endif
++        napi_get_reference_value(env, info.callback[0], &callback);
++        napi_call_function(env, nullptr, callback, RESULT_PARAMS_NUM, result, &undefine);
++    } else {
++        napi_ref errCb = info.callback[1];
++        if (!errCb) {
++            LOGE("Get callback func[1] is null");
++            errCb = info.callback[0];
++        }
++        napi_get_reference_value(env, errCb, &callback);
++#ifdef ENABLE_NAPI_WIFI_MANAGER
++        std::string errMsg = GetNapiErrMsg(env, info.errorCode, info.sysCap);
++        int32_t errCodeInfo = GetNapiErrCode(env, info.errorCode, info.sysCap);
++        result[0] = GetCallbackErrorValue(env, errCodeInfo, errMsg);
++#else
++        napi_create_uint32(env, info.errorCode, &result[0]);
++#endif
++        napi_call_function(env, nullptr, callback, RESULT_PARAMS_NUM, result, &undefine);
++    }
++}
++
++void HandlePromiseErrCode(const napi_env& env, const AsyncContext& info)
++{
++    LOGI("HandlePromiseErrCode, errCode = %{public}d", (int)info.errorCode);
++    if (info.errorCode == ErrCode::WIFI_OPT_SUCCESS) {
++        napi_resolve_deferred(env, info.deferred, info.result);
++    } else {
++#ifdef ENABLE_NAPI_WIFI_MANAGER
++        int32_t errCodeInfo = GetNapiErrCode(env, info.errorCode, info.sysCap);
++        std::string errMsg = GetNapiErrMsg(env, info.errorCode, info.sysCap);
++        napi_value businessError = nullptr;
++        napi_value eCode = nullptr;
++        napi_value eMsg = nullptr;
++        napi_value eData = NapiGetNull(env);
++        napi_create_int32(env, errCodeInfo, &eCode);
++        napi_create_string_utf8(env, errMsg.c_str(), errMsg.length(), &eMsg);
++        napi_create_object(env, &businessError);
++        napi_set_named_property(env, businessError, "code", eCode);
++        napi_set_named_property(env, businessError, "message", eMsg);
++        napi_set_named_property(env, businessError, "data", eData);
++        napi_reject_deferred(env, info.deferred, businessError);
++#else
++        napi_reject_deferred(info.env, info.deferred, info.result);
++#endif
++    }
++}
++
++void HandleSyncErrCode(const napi_env& env, int32_t errCode, int32_t sysCap)
++{
++    LOGI("HandleSyncErrCode, errCode = %{public}d", (int)errCode);
++    if (errCode == ErrCode::WIFI_OPT_SUCCESS) {
++        return;
++    }
++    std::string errMsg = GetNapiErrMsg(env, errCode, sysCap);
++    int32_t errCodeInfo = GetNapiErrCode(env, errCode, sysCap);
++    if (errMsg != "") {
++        napi_throw_error(env, std::to_string(errCodeInfo).c_str(), errMsg.c_str());
++    }
++}
++} // namespace Plugin
++} // namespace OHOS
+diff --git a/wifi_manager/wifi_napi_errcode.h b/wifi_manager/wifi_napi_errcode.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..1111aeb262da978ac22a13110f3aaa3948636e26
+--- /dev/null
++++ b/wifi_manager/wifi_napi_errcode.h
+@@ -0,0 +1,118 @@
++/*
++ * Copyright (C) 2022 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#ifndef WIFI_NAPI_ERRCODE_H_
++#define WIFI_NAPI_ERRCODE_H_
++
++#include <string>
++
++#include "wifi_napi_errcode.h"
++#include "wifi_napi_utils.h"
++
++namespace OHOS {
++namespace Plugin {
++static const std::string BUSINESS_ERROR_PROPERTY_CODE = "code";
++static const std::string BUSINESS_ERROR_PROPERTY_MESSAGE = "message";
++static const std::string BUSINESS_ERROR_PROPERTY_DATA = "data";
++
++enum WifiNapiErrCode {
++    WIFI_ERRCODE_SUCCESS = 0,                    /* successfully */
++    WIFI_ERRCODE_PERMISSION_DENIED = 201,        /* permission denied */
++    WIFI_ERRCODE_NON_SYSTEMAPP = 202,            /* not system app */
++    WIFI_ERRCODE_INVALID_PARAM = 401,            /* invalid params */
++    WIFI_ERRCODE_NOT_SUPPORTED = 801,            /* not supported */
++    WIFI_ERRCODE_OPERATION_FAILED = 1000,        /* failed */
++    WIFI_ERRCODE_WIFI_NOT_OPENED = 1001,         /* sta service not opened */
++    WIFI_ERRCODE_OPEN_FAIL_WHEN_CLOSING = 1003,  /* forbid when current airplane opened */
++    WIFI_ERRCODE_CLOSE_FAIL_WHEN_OPENING = 1004, /* forbid when current powersaving opened */
++};
++
++#ifdef ENABLE_NAPI_WIFI_MANAGER
++#ifndef WIFI_NAPI_ASSERT
++#define WIFI_NAPI_ASSERT(env, cond, errCode, sysCap) \
++    do {                                             \
++        if (!(cond)) {                               \
++            napi_value res = nullptr;                \
++            HandleSyncErrCode(env, errCode, sysCap); \
++            napi_get_undefined(env, &res);           \
++            return res;                              \
++        }                                            \
++    } while (0)
++#endif
++
++#ifndef WIFI_NAPI_RETURN
++#define WIFI_NAPI_RETURN(env, cond, errCode, sysCap) \
++    do {                                             \
++        napi_value res = nullptr;                    \
++        if (!(cond)) {                               \
++            HandleSyncErrCode(env, errCode, sysCap); \
++        }                                            \
++        napi_get_undefined(env, &res);               \
++        return res;                                  \
++    } while (0)
++#endif
++
++#else /* #else ENABLE_NAPI_WIFI_MANAGER */
++
++#ifndef WIFI_NAPI_ASSERT
++#define WIFI_NAPI_ASSERT(env, cond, errCode, sysCap) \
++    do {                                             \
++        if (!(cond)) {                               \
++            napi_value res = nullptr;                \
++            napi_get_boolean(env, cond, &res);       \
++            return res;                              \
++        }                                            \
++    } while (0)
++#endif
++
++#ifndef WIFI_NAPI_RETURN
++#define WIFI_NAPI_RETURN(env, cond, errCode, sysCap) \
++    do {                                             \
++        napi_value res = nullptr;                    \
++        napi_get_boolean(env, cond, &res);           \
++        return res;                                  \
++    } while (0)
++#endif
++#endif /* #endif ENABLE_NAPI_WIFI_MANAGER */
++
++/**
++ * @brief Thow error code for async-callback function.
++ *
++ * @param env The env.
++ * @param info The input data.
++ */
++void HandleCallbackErrCode(const napi_env& env, const AsyncContext& info);
++
++/**
++ * @brief Thow error code for async-promise function.
++ *
++ * @param env The env.
++ * @param info The input data.
++ */
++void HandlePromiseErrCode(const napi_env& env, const AsyncContext& info);
++
++#ifdef ENABLE_NAPI_WIFI_MANAGER
++/**
++ * @brief Thow error code for async function.
++ *
++ * @param env The env.
++ * @param errCode The error code.
++ * @param sysCap System capability code.
++ */
++void HandleSyncErrCode(const napi_env& env, int32_t errCode, int32_t sysCap);
++#endif
++} // namespace Plugin
++} // namespace OHOS
++#endif
+diff --git a/wifi_manager/wifi_napi_utils.cpp b/wifi_manager/wifi_napi_utils.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..6b5dc76e047ee6c8a75d7ba799986a75d2e65119
+--- /dev/null
++++ b/wifi_manager/wifi_napi_utils.cpp
+@@ -0,0 +1,226 @@
++/*
++ * Copyright (C) 2021-2022 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include "wifi_napi_utils.h"
++
++#include "log.h"
++#include "securec.h"
++#include "wifi_napi_errcode.h"
++
++namespace OHOS {
++namespace Plugin {
++TraceFuncCall::TraceFuncCall(std::string funcName) : m_funcName(funcName)
++{
++    if (m_isTrace) {
++        m_startTime = std::chrono::steady_clock::now();
++        LOGI("Call wifi func: %{public}s (start)", m_funcName.c_str());
++    }
++}
++
++TraceFuncCall::~TraceFuncCall()
++{
++    if (m_isTrace) {
++        auto us = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - m_startTime)
++                      .count();
++        constexpr int usForPerMs = 1000;
++        LOGI("Call wifi func: %{public}s (end), time cost:%{public}lldus, %{public}lldms", m_funcName.c_str(), us,
++            us / usForPerMs);
++    }
++}
++
++napi_value UndefinedNapiValue(const napi_env& env)
++{
++    napi_value result;
++    napi_get_undefined(env, &result);
++    return result;
++}
++
++napi_status SetValueUtf8String(
++    const napi_env& env, const char* fieldStr, const char* str, napi_value& result, size_t strLen)
++{
++    napi_value value;
++    size_t len = strLen;
++    napi_status status = napi_create_string_utf8(env, str, len, &value);
++    if (status != napi_ok) {
++        LOGE("Set value create utf8 string error! field: %{public}s", fieldStr);
++        return status;
++    }
++    status = napi_set_named_property(env, result, fieldStr, value);
++    if (status != napi_ok) {
++        LOGE("Set utf8 string named property error! field: %{public}s", fieldStr);
++    }
++    return status;
++}
++
++napi_status SetValueUtf8String(
++    const napi_env& env, const std::string& fieldStr, const std::string& valueStr, napi_value& result)
++{
++    LOGD("SetValueUtf8String, fieldStr: %{public}s, valueStr: %{public}s", fieldStr.c_str(), valueStr.c_str());
++    napi_value value;
++    size_t len = valueStr.length();
++    napi_status status = napi_create_string_utf8(env, valueStr.c_str(), len, &value);
++    if (status != napi_ok) {
++        LOGE("Set value create utf8 string error! field: %{public}s", fieldStr.c_str());
++        return status;
++    }
++    status = napi_set_named_property(env, result, fieldStr.c_str(), value);
++    if (status != napi_ok) {
++        LOGE("Set utf8 string named property error! field: %{public}s", fieldStr.c_str());
++    }
++    return status;
++}
++
++napi_status SetValueInt32(const napi_env& env, const char* fieldStr, const int intValue, napi_value& result)
++{
++    napi_value value;
++    napi_status status = napi_create_int32(env, intValue, &value);
++    if (status != napi_ok) {
++        LOGE("Set value create int32 error! field: %{public}s", fieldStr);
++        return status;
++    }
++    status = napi_set_named_property(env, result, fieldStr, value);
++    if (status != napi_ok) {
++        LOGE("Set int32 named property error! field: %{public}s", fieldStr);
++    }
++    return status;
++}
++
++napi_status SetValueUnsignedInt32(const napi_env& env, const char* fieldStr, const int intValue, napi_value& result)
++{
++    napi_value value;
++    napi_status status = napi_create_uint32(env, intValue, &value);
++    if (status != napi_ok) {
++        LOGE("Set value create unsigned int32 error! field: %{public}s", fieldStr);
++        return status;
++    }
++    status = napi_set_named_property(env, result, fieldStr, value);
++    if (status != napi_ok) {
++        LOGE("Set unsigned int32 named property error! field: %{public}s", fieldStr);
++    }
++    return status;
++}
++
++napi_status SetValueBool(const napi_env& env, const char* fieldStr, const bool boolvalue, napi_value& result)
++{
++    napi_value value;
++    napi_status status = napi_get_boolean(env, boolvalue, &value);
++    if (status != napi_ok) {
++        LOGE("Set value create boolean error! field: %{public}s", fieldStr);
++        return status;
++    }
++    status = napi_set_named_property(env, result, fieldStr, value);
++    if (status != napi_ok) {
++        LOGE("Set boolean named property error! field: %{public}s", fieldStr);
++    }
++    return status;
++}
++
++static napi_value InitAsyncCallBackEnv(const napi_env& env, AsyncContext* asyncContext, const size_t argc,
++    const napi_value* argv, const size_t nonCallbackArgNum)
++{
++    for (size_t i = nonCallbackArgNum; i != argc; ++i) {
++        napi_valuetype valuetype;
++        NAPI_CALL(env, napi_typeof(env, argv[i], &valuetype));
++        NAPI_ASSERT(env, valuetype == napi_function, "Wrong argument type. Function expected.");
++        napi_create_reference(env, argv[i], 1, &asyncContext->callback[i - nonCallbackArgNum]);
++    }
++    return nullptr;
++}
++
++static napi_value InitAsyncPromiseEnv(const napi_env& env, AsyncContext* asyncContext, napi_value& promise)
++{
++    napi_deferred deferred;
++    NAPI_CALL(env, napi_create_promise(env, &deferred, &promise));
++    asyncContext->deferred = deferred;
++    return nullptr;
++}
++
++static napi_value DoCallBackAsyncWork(const napi_env& env, AsyncContext* asyncContext)
++{
++    napi_create_async_work(
++        env, nullptr, asyncContext->resourceName,
++        [](napi_env env, void* data) {
++            if (data == nullptr) {
++                LOGE("Async data parameter is null");
++                return;
++            }
++            AsyncContext* context = (AsyncContext*)data;
++            context->executeFunc(context);
++        },
++        [](napi_env env, napi_status status, void* data) {
++            if (data == nullptr) {
++                LOGE("Async data parameter is null");
++                return;
++            }
++            AsyncContext* context = (AsyncContext*)data;
++            context->completeFunc(data);
++            HandleCallbackErrCode(env, *context);
++            if (context->callback[0] != nullptr) {
++                napi_delete_reference(env, context->callback[0]);
++            }
++            if (context->callback[1] != nullptr) {
++                napi_delete_reference(env, context->callback[1]);
++            }
++            napi_delete_async_work(env, context->work);
++            delete context;
++        },
++        (void*)asyncContext, &asyncContext->work);
++    NAPI_CALL(env, napi_queue_async_work(env, asyncContext->work));
++    return UndefinedNapiValue(env);
++}
++
++static napi_value DoPromiseAsyncWork(const napi_env& env, AsyncContext* asyncContext)
++{
++    napi_create_async_work(
++        env, nullptr, asyncContext->resourceName,
++        [](napi_env env, void* data) {
++            if (data == nullptr) {
++                LOGE("Async data parameter is null");
++                return;
++            }
++            AsyncContext* context = (AsyncContext*)data;
++            context->executeFunc(context);
++        },
++        [](napi_env env, napi_status status, void* data) {
++            if (data == nullptr) {
++                LOGE("Async data parameter is null");
++                return;
++            }
++            AsyncContext* context = (AsyncContext*)data;
++            context->completeFunc(data);
++            HandlePromiseErrCode(env, *context);
++            napi_delete_async_work(env, context->work);
++            delete context;
++        },
++        (void*)asyncContext, &asyncContext->work);
++    napi_queue_async_work(env, asyncContext->work);
++    return UndefinedNapiValue(env);
++}
++
++napi_value DoAsyncWork(const napi_env& env, AsyncContext* asyncContext, const size_t argc, const napi_value* argv,
++    const size_t nonCallbackArgNum)
++{
++    if (argc > nonCallbackArgNum) {
++        InitAsyncCallBackEnv(env, asyncContext, argc, argv, nonCallbackArgNum);
++        return DoCallBackAsyncWork(env, asyncContext);
++    } else {
++        napi_value promise;
++        InitAsyncPromiseEnv(env, asyncContext, promise);
++        DoPromiseAsyncWork(env, asyncContext);
++        return promise;
++    }
++}
++} // namespace Plugin
++} // namespace OHOS
+diff --git a/wifi_manager/wifi_napi_utils.h b/wifi_manager/wifi_napi_utils.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..23fd49d3012e56b272cffa86707160b2c8b894cd
+--- /dev/null
++++ b/wifi_manager/wifi_napi_utils.h
+@@ -0,0 +1,136 @@
++/*
++ * Copyright (C) 2021-2022 Huawei Device Co., Ltd.
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#ifndef WIFI_NAPI_UTILS_H_
++#define WIFI_NAPI_UTILS_H_
++
++#include <chrono>
++#include <string>
++
++#include "napi/native_api.h"
++#include "napi/native_node_api.h"
++
++namespace OHOS {
++namespace Plugin {
++static const std::int32_t SYSCAP_WIFI_STA = 2500000;
++static const int32_t WIFI_NAPI_MAX_PARA = 2;
++
++#define EVENT_STA_POWER_STATE_CHANGE "wifiStateChange"
++#define EVENT_STA_CONN_STATE_CHANGE "wifiConnectionChange"
++
++class RegObj {
++public:
++    RegObj() : m_regEnv(0), m_regHanderRef(nullptr) {}
++    explicit RegObj(const napi_env& env, const napi_ref& ref) : m_regEnv(env),m_regHanderRef(ref){}
++
++    ~RegObj() {}
++
++    bool operator==(const RegObj& other) const
++    {
++        return m_regEnv == other.m_regEnv && m_regHanderRef == other.m_regHanderRef;
++    }
++
++    bool operator!=(const RegObj& other) const
++    {
++        return !(*this == other);
++    }
++
++    bool operator<(const RegObj& other) const
++    {
++        return m_regEnv < other.m_regEnv || (m_regEnv == other.m_regEnv && m_regHanderRef < other.m_regHanderRef);
++    }
++
++    napi_env m_regEnv;
++    napi_ref m_regHanderRef;
++};
++
++class TraceFuncCall final {
++public:
++    TraceFuncCall(std::string funcName);
++
++    TraceFuncCall() = delete;
++
++    ~TraceFuncCall();
++
++private:
++    std::string m_funcName;
++    std::chrono::steady_clock::time_point m_startTime;
++    bool m_isTrace = true;
++};
++
++#define TRACE_FUNC_CALL TraceFuncCall func(__func__)
++#define TRACE_FUNC_CALL_NAME(name) TraceFuncCall funcName(name)
++
++#ifndef NO_SANITIZE
++#ifdef __has_attribute
++#if __has_attribute(no_sanitize)
++#define NO_SANITIZE(type) __attribute__((no_sanitize(type)))
++#endif
++#endif
++#endif
++
++#ifndef NO_SANITIZE
++#define NO_SANITIZE(type)
++#endif
++
++constexpr int ERR_CODE_SUCCESS = 0;
++
++struct WifiCallbackWorker {
++    napi_env env = nullptr;
++    napi_ref ref = nullptr;
++    int32_t code = 0;
++};
++
++class AsyncContext {
++public:
++    napi_env env;
++    napi_async_work work;
++    napi_deferred deferred;
++    napi_ref callback[2] = { 0 };
++    std::function<void(void*)> executeFunc;
++    std::function<void(void*)> completeFunc;
++    napi_value resourceName;
++    napi_value result;
++    int32_t sysCap;
++    int errorCode;
++
++    AsyncContext(napi_env e, napi_async_work w = nullptr, napi_deferred d = nullptr) : env(e), 
++    work(w), 
++    deferred(d), 
++    executeFunc(nullptr), 
++    completeFunc(nullptr), 
++    result(nullptr), 
++    sysCap(0), 
++    errorCode(ERR_CODE_SUCCESS) {}
++
++    AsyncContext() = delete;
++
++    virtual ~AsyncContext() {}
++};
++
++napi_value UndefinedNapiValue(const napi_env& env);
++napi_status SetValueUtf8String(
++    const napi_env& env, const char* fieldStr, const char* str, napi_value& result, size_t strLen = NAPI_AUTO_LENGTH);
++napi_status SetValueUtf8String(
++    const napi_env& env, const std::string& fieldStr, const std::string& valueStr, napi_value& result);
++napi_status SetValueInt32(const napi_env& env, const char* fieldStr, const int intValue, napi_value& result);
++napi_status SetValueUnsignedInt32(const napi_env& env, const char* fieldStr, const int intValue, napi_value& result);
++napi_status SetValueBool(const napi_env& env, const char* fieldStr, const bool boolValue, napi_value& result);
++napi_value DoAsyncWork(const napi_env& env, AsyncContext* asyncContext, const size_t argc, const napi_value* argv,
++    const size_t nonCallbackArgNum);
++} // namespace Plugin
++} // namespace OHOS
++
++#endif
